@@ -1,23 +1,26 @@
-# Builds DeadMansSwitch.exe on Windows and publishes it as a GitHub Release
-# whenever a vMAJOR.MINOR tag is pushed. The in-app updater looks for that asset.
-name: Release
+# Builds DeadMansSwitch.exe on Windows and runs its self-test on every push.
+# Pushing a vMAJOR.MINOR tag also publishes it as a GitHub Release, which is
+# what the in-app updater looks for.
+name: Build
 
 on:
   push:
+    branches: [main]
     tags: ['v*']
+  pull_request:
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  release:
+  build:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
 
       - name: Check tag matches VERSION
-        if: github.event_name == 'push'
+        if: startsWith(github.ref, 'refs/tags/')
         shell: pwsh
         run: |
           $version = (Get-Content VERSION -Raw).Trim()
@@ -25,11 +28,26 @@ jobs:
             throw "Tag ${{ github.ref_name }} does not match VERSION ($version)"
           }
 
-      - name: Build exe
-        shell: powershell   # Windows PowerShell 5.1, the host ps2exe targets
-        run: .\build\Build.ps1
+      - name: Build
+        run: dotnet build src/DeadMansSwitch/DeadMansSwitch.csproj -c Release -o dist
+
+      # The window's XAML is only parsed at runtime, so build success alone
+      # doesn't prove the app starts.
+      - name: Self-test
+        shell: pwsh
+        run: |
+          $p = Start-Process dist\DeadMansSwitch.exe -ArgumentList '--selftest' -Wait -PassThru `
+                 -RedirectStandardOutput out.txt -RedirectStandardError err.txt
+          Get-Content out.txt, err.txt
+          if ($p.ExitCode -ne 0) { throw "Self-test failed with exit code $($p.ExitCode)" }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DeadMansSwitch
+          path: dist/DeadMansSwitch.exe
 
       - name: Extract release notes from CHANGELOG
+        if: startsWith(github.ref, 'refs/tags/')
         shell: pwsh
         run: |
           $version = (Get-Content VERSION -Raw).Trim()
@@ -39,17 +57,10 @@ jobs:
           Set-Content -Path release-notes.md -Value $notes
 
       - name: Publish release
-        if: github.event_name == 'push'
+        if: startsWith(github.ref, 'refs/tags/')
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "${{ github.ref_name }}" dist/DeadMansSwitch.exe `
             --title "Dead Man's Switch ${{ github.ref_name }}" --notes-file release-notes.md
-
-      - name: Upload build (manual runs)
-        if: github.event_name == 'workflow_dispatch'
-        uses: actions/upload-artifact@v4
-        with:
-          name: DeadMansSwitch
-          path: dist/DeadMansSwitch.exe

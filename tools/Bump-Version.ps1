@@ -4,7 +4,7 @@
 .DESCRIPTION
     Versions are MAJOR.MINOR with a single-digit MINOR that rolls over after 9:
         1.1, 1.2 ... 1.9, 2.0, 2.1 ... 2.9, 3.0 ...
-    Updates VERSION and $AppVersion in src\DeadMansSwitch.ps1, and turns the
+    Updates VERSION (the build stamps it into the exe) and turns the
     CHANGELOG's "Unreleased" section into a dated section for the new version.
     With -Tag, also commits and creates the vMAJOR.MINOR git tag; pushing that
     tag makes GitHub Actions build the exe and publish the release.
@@ -37,16 +37,11 @@ $date = Get-Date -Format 'yyyy-MM-dd'
 $text = $text -replace $unreleased, "## [Unreleased]`n`n## [$next] - $date"
 Set-Content -Path $changelog -Value $text -NoNewline
 
-$src = Join-Path $root 'src\DeadMansSwitch.ps1'
-$code = Get-Content $src -Raw
-$code = $code -replace "(\`$AppVersion\s*=\s*)'[^']*'", "`${1}'$next'"
-Set-Content -Path $src -Value $code -NoNewline
-
 Set-Content -Path $versionFile -Value $next
 
 Write-Host "Version $current -> $next"
 if ($Tag) {
-    git -C $root add VERSION CHANGELOG.md src/DeadMansSwitch.ps1
+    git -C $root add VERSION CHANGELOG.md
     git -C $root commit -m "Release v$next"
     git -C $root tag -a "v$next" -m "v$next"   # annotated, so --follow-tags pushes it
     Write-Host "Tagged v$next. Push with: git push --follow-tags"

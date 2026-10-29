@@ -8,31 +8,35 @@ Versions are `MAJOR.MINOR` with a single-digit minor that rolls over after 9
 
 ## [1.1] - 2026-10-29
 
-First versioned release. The source was recovered from the existing
-`DeadManSwitchWin.exe` (a ps2exe build with file version 0.0.0.0).
-
-### Fixed
-- The button said "add 10 minutes" but restarted a 5-minute period. It now
-  shows the actual interval ("reset to 5 min").
+First versioned release, rewritten as a native Windows app (C# / WPF on
+.NET Framework 4.8) instead of a PowerShell script packaged with ps2exe. That
+packaging was often flagged by antivirus.
 
 ### Changed
 - Renamed from "Shutdown Guard" to **Dead Man's Switch**. The exe is now
-  `DeadMansSwitch.exe` and the script `src/DeadMansSwitch.ps1`.
+  `DeadMansSwitch.exe`.
+- New look: a dark, rounded window with a countdown ring and large digits in
+  place of the two bars. The window turns red during the final warning.
 
 ### Added
-- Timer settings in the window: set the check interval and the final-warning
-  length and click Save. They're saved to `%APPDATA%\DeadMansSwitch\settings.json`
-  and used every time the app opens.
-- App icon (a red power symbol), embedded in the exe.
-- Automatic updater: on startup, checks this repo's latest GitHub Release and,
-  if it is newer, offers to download and install it. The exe is swapped and
-  relaunched once the running copy exits. Turn off with `$CheckForUpdates = $false`.
-- `$AppVersion` in the script; the version is shown in the window title and
-  stamped into the exe's file properties.
-- `build/Build.ps1` to compile the exe with ps2exe.
-- `tools/Bump-Version.ps1` to move to the next version, date the changelog and tag the release.
-- GitHub Actions workflow that builds the exe on Windows and publishes the
-  release when a `v*` tag is pushed.
+- Settings panel (gear button): check interval, final-warning length, what
+  happens at the end (shut down, restart or hibernate), the warning sound and
+  update checks. Saved to `%APPDATA%\DeadMansSwitch\settings.json` and used
+  every time the app opens.
+- Automatic updates: when the app opens it checks this repo's latest GitHub
+  Release and shows a banner if there's a newer version. One click downloads it,
+  swaps it in and restarts.
+- App icon, embedded in the exe, and the version shown in the title bar and the
+  exe's file properties.
+- `tools/Bump-Version.ps1` to move to the next version, date the changelog and
+  tag the release.
+- GitHub Actions build on Windows for every push, with a self-test
+  (`--selftest`), and a GitHub Release for each `v*` tag.
+
+### Fixed
+- The button said "add 10 minutes" but restarted a 5-minute period.
+- If the shutdown command fails, the app now shows the error and stays open
+  instead of closing silently.
 
 ## [0.0] - pre-versioning
 

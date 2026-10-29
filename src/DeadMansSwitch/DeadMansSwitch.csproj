@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    .NET Framework 4.8 ships with Windows 10 and 11, so the exe runs without
+    installing a runtime. WPF is referenced directly and the window's XAML is
+    loaded at runtime, which keeps the build working with any .NET SDK,
+    including on Linux.
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>DeadMansSwitch</AssemblyName>
+    <RootNamespace>DeadMansSwitch</RootNamespace>
+    <ApplicationIcon>../../assets/DeadMansSwitch.ico</ApplicationIcon>
+    <Version>$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)../../VERSION').Trim())</Version>
+    <Product>Dead Man's Switch</Product>
+    <AssemblyTitle>Dead Man's Switch</AssemblyTitle>
+    <Description>Shuts the PC down unless someone keeps confirming they're there.</Description>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <DebugType>none</DebugType>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+    <Reference Include="PresentationCore" />
+    <Reference Include="PresentationFramework" />
+    <Reference Include="WindowsBase" />
+    <Reference Include="System.Xaml" />
+    <Reference Include="System.Net.Http" />
+    <Reference Include="System.Runtime.Serialization" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="MainWindow.xaml" LogicalName="DeadMansSwitch.MainWindow.xaml" />
+    <EmbeddedResource Include="../../assets/DeadMansSwitch.png" LogicalName="DeadMansSwitch.icon.png" />
+  </ItemGroup>
+
+</Project>

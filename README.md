@@ -1,67 +1,56 @@
 # Dead Man's Switch
 
-A small Windows tool that shuts the PC down unless someone keeps confirming
+A small Windows app that shuts the PC down unless someone keeps confirming
 they're still there. Useful for leaving a machine running (a download, a render,
 a game server) without it staying on all night if you fall asleep or walk away.
 
 ## How it works
 
-1. A window opens on top of everything with a green **"Time until next check"**
-   bar that drains over the check interval (5 minutes unless you change it).
-2. Clicking **"I'm here"** refills the bar and starts the period again.
-3. If the bar runs out, the window turns red and the **final warning** starts
-   (60 seconds unless you change it). It plays a sound and pulls itself to the foreground every 2 seconds.
-4. If nobody clicks before the warning ends, the PC shuts down
-   (`shutdown /s /f /t 0`, which forces open apps to close).
+1. A window stays on top with a green ring counting down to the next check
+   (5 minutes unless you change it).
+2. Clicking **I'm here** refills the ring and starts the countdown again.
+3. If the ring runs out, the window turns red and the **final warning** starts
+   (60 seconds unless you change it). It plays a sound and pulls itself to the
+   front every 2 seconds, even if minimized.
+4. If nobody clicks before the warning ends, the PC shuts down, restarts or
+   hibernates, depending on the setting. Shutdown and restart force open apps
+   to close.
 
-**Cancel shutdown timer** closes the window without shutting down.
+**Stop timer and close** (or the × button) closes the app without doing anything.
 
 ## Download and run
 
 Get `DeadMansSwitch.exe` from the
 [latest release](https://github.com/samschultzponsys/dead-mans-switch/releases/latest)
-and run it. It needs no install.
+and run it. There's nothing to install. It needs .NET Framework 4.8, which is
+built into Windows 10 (May 2019 update or later) and Windows 11.
 
-To run the script directly instead:
+## Settings
 
-```powershell
-powershell -ExecutionPolicy Bypass -WindowStyle Hidden -File src\DeadMansSwitch.ps1
-```
+Click the gear in the title bar:
 
-## Timer settings
-
-Set the timers at the bottom of the window: **Check every** (1-1440 minutes)
-and **Final warning** (10-600 seconds), then click **Save**. A running check
-period restarts with the new length straight away; during a final warning
-the new lengths apply from the next check.
-
-Saved values are stored in `%APPDATA%\DeadMansSwitch\settings.json` and are
-used every time the app opens. Delete that file to go back to the defaults.
-
-## Other configuration
-
-These live in the `CONFIG` block at the top of `src/DeadMansSwitch.ps1`.
-Changing them in the exe means rebuilding it (see Building).
-
-| Setting | Default | Meaning |
+| Setting | Default | Range |
 |---|---|---|
-| `$ExtendSeconds` | `300` | Default check interval, in seconds, until one is saved |
-| `$WarnSeconds` | `60` | Default final warning, in seconds, until one is saved |
-| `$TickMs` | `250` | How often the countdown text refreshes, in ms |
-| `$AllowCancel` | `$true` | Show the Cancel button and allow closing the window |
-| `$PlaySound` | `$true` | Play a warning sound when the final warning starts |
-| `$ShutdownExe` / `$ShutdownArgs` | `shutdown.exe` / `/s /f /t 0` | What runs at the end. Use `/r` to restart or `/h` to hibernate |
-| `$CheckForUpdates` | `$true` | Check GitHub for a newer version on startup |
+| Check every | 5 minutes | 1-1440 minutes |
+| Final warning | 60 seconds | 10-600 seconds |
+| When time runs out | Shut down | Shut down, Restart, Hibernate |
+| Play a sound at the final warning | On | |
+| Check for updates when the app opens | On | |
+
+**Save** applies the settings right away: a running check restarts with the
+new length, and a final warning already in progress keeps its length.
+Settings are stored in `%APPDATA%\DeadMansSwitch\settings.json` and used every
+time the app opens. Delete that file to go back to the defaults.
 
 ## Updates
 
-On startup the app asks GitHub for this repo's latest release. If it's newer
-than the running version and includes `DeadMansSwitch.exe`, it asks whether
-to update. Saying yes downloads the new exe next to the current one and closes
-the app; a small helper then replaces the exe and starts the new version.
+When the app opens it asks GitHub for this repo's latest release. If that's
+newer than the running version, a banner offers to update. Clicking **Update**
+downloads the new exe, puts it in place of the current one, and starts it. If
+GitHub can't be reached, nothing is shown and the timer runs as normal.
 
-If GitHub can't be reached, the check is skipped and the timer starts as normal.
-When running the `.ps1` directly, the app only shows the download link.
+Updating needs write access to the folder the exe is in, so keep it somewhere
+you own (Desktop, Documents, a tools folder) rather than `Program Files`.
 
 ## Versioning
 
@@ -73,7 +62,8 @@ after 9:
 ```
 
 Each release moves up by exactly one step. The current version is in the
-`VERSION` file, and releases are tagged `vMAJOR.MINOR` (for example `v1.2`).
+`VERSION` file, which the build stamps into the exe. Releases are tagged
+`vMAJOR.MINOR` (for example `v1.2`).
 
 ## Making a release
 
@@ -87,34 +77,44 @@ Each release moves up by exactly one step. The current version is in the
    git push --follow-tags
    ```
 
-Pushing the tag starts the **Release** GitHub Actions workflow, which builds
-the exe on Windows and publishes it as a GitHub Release with the changelog
-section as its notes. Installed copies pick it up on their next start.
-
-The workflow can also be started by hand from the Actions tab; that builds the
-exe and attaches it to the run as a download, without publishing a release.
+GitHub Actions builds every push to `main` on Windows and runs the app's
+self-test; the exe is attached to each run as a download. When the push is a
+`v*` tag, it also publishes a GitHub Release with the changelog section as its
+notes. Installed copies pick it up the next time they open.
 
 ## Building locally
 
-On Windows, in Windows PowerShell 5.1:
+With the [.NET SDK](https://dotnet.microsoft.com/download) (8 or later), on
+Windows or Linux:
 
-```powershell
-.\build\Build.ps1
+```
+dotnet build src/DeadMansSwitch/DeadMansSwitch.csproj -c Release -o dist
 ```
 
-This installs the [ps2exe](https://github.com/MScholtes/PS2EXE) module if
-needed and writes `dist\DeadMansSwitch.exe`. The build stops if
-`$AppVersion` in the script doesn't match `VERSION`.
+This writes `dist/DeadMansSwitch.exe`. On Windows, check that the window
+loads with:
+
+```
+dist\DeadMansSwitch.exe --selftest
+```
+
+It exits with code 0 if the self-test passes.
 
 ## Project layout
 
 ```
-src/DeadMansSwitch.ps1      the app (compiled into the exe)
-build/Build.ps1             ps2exe build
-tools/Bump-Version.ps1      version bump + changelog + tag
-tools/make_icon.py          regenerates the icon (needs Python + Pillow)
-assets/DeadMansSwitch.ico   app icon, embedded in the exe
-.github/workflows/          release build on tag push
-VERSION                     current version
-CHANGELOG.md                release history
+src/DeadMansSwitch/
+  MainWindow.xaml             window layout and styles (loaded at runtime)
+  MainView.cs                 timer phases, ring drawing, settings panel
+  Settings.cs                 settings file
+  Updater.cs                  GitHub release check and exe swap
+  Program.cs                  entry point and --selftest
+assets/DeadMansSwitch.ico     app icon (tools/make_icon.py redraws it)
+tools/Bump-Version.ps1        version bump + changelog + tag
+.github/workflows/build.yml   Windows build, self-test and releases
+VERSION                       current version
+CHANGELOG.md                  release history
 ```
+
+Versions before 1.1 were a PowerShell script packaged with ps2exe. That script
+is in the git history.
