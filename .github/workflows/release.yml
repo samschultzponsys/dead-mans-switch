@@ -1,0 +1,55 @@
+# Builds DeadMansSwitch.exe on Windows and publishes it as a GitHub Release
+# whenever a vMAJOR.MINOR tag is pushed. The in-app updater looks for that asset.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check tag matches VERSION
+        if: github.event_name == 'push'
+        shell: pwsh
+        run: |
+          $version = (Get-Content VERSION -Raw).Trim()
+          if ("${{ github.ref_name }}" -ne "v$version") {
+            throw "Tag ${{ github.ref_name }} does not match VERSION ($version)"
+          }
+
+      - name: Build exe
+        shell: powershell   # Windows PowerShell 5.1, the host ps2exe targets
+        run: .\build\Build.ps1
+
+      - name: Extract release notes from CHANGELOG
+        shell: pwsh
+        run: |
+          $version = (Get-Content VERSION -Raw).Trim()
+          $text = Get-Content CHANGELOG.md -Raw
+          $pattern = "(?ms)^## \[$([regex]::Escape($version))\][^\n]*\n(.*?)(?=^## \[|\z)"
+          $notes = if ($text -match $pattern) { $Matches[1].Trim() } else { "Release v$version" }
+          Set-Content -Path release-notes.md -Value $notes
+
+      - name: Publish release
+        if: github.event_name == 'push'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" dist/DeadMansSwitch.exe `
+            --title "Dead Man's Switch ${{ github.ref_name }}" --notes-file release-notes.md
+
+      - name: Upload build (manual runs)
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: DeadMansSwitch
+          path: dist/DeadMansSwitch.exe
