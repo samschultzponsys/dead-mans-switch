@@ -144,6 +144,42 @@
       <Setter Property="FontSize" Value="12"/>
       <Setter Property="Margin" Value="0,12,0,6"/>
     </Style>
+    <!-- Small text button, used for the version and "Reset to defaults". -->
+    <Style x:Key="LinkButton" TargetType="Button">
+      <Setter Property="Foreground" Value="{StaticResource Muted}"/>
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <ContentPresenter x:Name="Text" VerticalAlignment="Center"/>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True"><Setter Property="Foreground" Value="#FF2ECC71"/></Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <Style TargetType="ScrollBar">
+      <Setter Property="Width" Value="6"/>
+      <Setter Property="MinWidth" Value="6"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ScrollBar">
+            <Track x:Name="PART_Track" IsDirectionReversed="True">
+              <Track.Thumb>
+                <Thumb>
+                  <Thumb.Template>
+                    <ControlTemplate TargetType="Thumb"><Border CornerRadius="3" Background="#FF3A3E48"/></ControlTemplate>
+                  </Thumb.Template>
+                </Thumb>
+              </Track.Thumb>
+            </Track>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
   </Window.Resources>
 
   <!-- The shadow sits on its own border so the effect doesn't soften the text. -->
@@ -159,13 +195,12 @@
             <Image x:Name="AppIcon" Width="18" Height="18"/>
             <TextBlock Text="Dead Man's Switch" Foreground="{StaticResource Text}" FontSize="13" FontWeight="SemiBold"
                        Margin="8,0,0,0" VerticalAlignment="Center"/>
-            <TextBlock x:Name="VersionText" Foreground="{StaticResource Muted}" FontSize="11"
-                       Margin="6,1,0,0" VerticalAlignment="Center"/>
+            <Button x:Name="VersionBtn" Style="{StaticResource LinkButton}" Margin="6,1,0,0" ToolTip="What's new"/>
           </StackPanel>
           <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
             <Button x:Name="SettingsBtn" Style="{StaticResource IconButton}" Content="&#xE713;" ToolTip="Settings"/>
             <Button x:Name="MinBtn" Style="{StaticResource IconButton}" Content="&#xE921;" ToolTip="Minimize"/>
-            <Button x:Name="CloseBtn" Style="{StaticResource IconButton}" Content="&#xE8BB;" ToolTip="Stop timer and close"/>
+            <Button x:Name="CloseBtn" Style="{StaticResource IconButton}" Content="&#xE8BB;" ToolTip="Close"/>
           </StackPanel>
         </Grid>
 
@@ -179,8 +214,8 @@
           </Grid>
         </Border>
 
-        <!-- Both panels share one cell; the hidden one still reserves its
-             size, so the window doesn't jump when switching. -->
+        <!-- All panels share one cell and only one is visible; the hidden
+             ones still reserve their size, so the window doesn't jump. -->
         <Grid>
           <StackPanel x:Name="MainPanel">
             <Grid Width="232" Height="232" Margin="0,22,0,14">
@@ -196,12 +231,19 @@
             <TextBlock x:Name="StatusText" Foreground="{StaticResource Muted}" FontSize="12"
                        HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" Margin="0,0,0,16"/>
             <Button x:Name="ExtendBtn" Style="{StaticResource PrimaryButton}" Content="I'm here" Height="52"/>
-            <Button x:Name="StopBtn" Style="{StaticResource GhostButton}" Content="Stop timer and close"
-                    Height="34" Margin="0,8,0,0"/>
+            <Grid Margin="0,8,0,0">
+              <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="8"/><ColumnDefinition/></Grid.ColumnDefinitions>
+              <Button x:Name="PauseBtn" Style="{StaticResource GhostButton}" Content="Pause" Height="34"/>
+              <Button x:Name="StopBtn" Grid.Column="2" Style="{StaticResource GhostButton}" Content="Stop timer and quit" Height="34"/>
+            </Grid>
           </StackPanel>
 
           <StackPanel x:Name="SettingsPanel" Visibility="Hidden">
-            <TextBlock Text="Settings" Foreground="{StaticResource Text}" FontSize="18" FontWeight="SemiBold" Margin="0,16,0,2"/>
+            <Grid Margin="0,16,0,2">
+              <TextBlock Text="Settings" Foreground="{StaticResource Text}" FontSize="18" FontWeight="SemiBold"/>
+              <Button x:Name="ResetBtn" Style="{StaticResource LinkButton}" FontSize="12" Content="Reset to defaults"
+                      HorizontalAlignment="Right"/>
+            </Grid>
 
             <TextBlock Text="Check every" Style="{StaticResource FieldLabel}"/>
             <StackPanel Orientation="Horizontal">
@@ -223,6 +265,7 @@
             </UniformGrid>
 
             <CheckBox x:Name="SoundBox" Content="Play a sound at the final warning" Margin="0,18,0,0"/>
+            <CheckBox x:Name="TrayBox" Content="Keep running in the tray when closed" Margin="0,10,0,0"/>
             <CheckBox x:Name="UpdatesBox" Content="Check for updates when the app opens" Margin="0,10,0,0"/>
 
             <TextBlock x:Name="SettingsMsg" Foreground="#FFF08A7E" FontSize="12" TextWrapping="Wrap" Margin="0,12,0,0"/>
@@ -232,6 +275,35 @@
               <Button x:Name="BackBtn" Style="{StaticResource GhostButton}" Content="Cancel" Height="40"/>
               <Button x:Name="SaveBtn" Grid.Column="2" Style="{StaticResource PrimaryButton}" Content="Save" Height="40" FontSize="14"/>
             </Grid>
+          </StackPanel>
+
+          <DockPanel x:Name="ChangelogPanel" Visibility="Hidden">
+            <TextBlock DockPanel.Dock="Top" Text="What's new" Foreground="{StaticResource Text}" FontSize="18"
+                       FontWeight="SemiBold" Margin="0,16,0,10"/>
+            <Grid DockPanel.Dock="Bottom" Margin="0,12,0,0">
+              <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="10"/><ColumnDefinition/></Grid.ColumnDefinitions>
+              <Button x:Name="ChangelogCloseBtn" Style="{StaticResource GhostButton}" Content="Close" Height="40"/>
+              <Button x:Name="ChangelogUpdateBtn" Grid.Column="2" Style="{StaticResource PrimaryButton}" Content="Update now"
+                      Height="40" FontSize="14" Visibility="Collapsed"/>
+            </Grid>
+            <!-- Fixed height so long notes scroll instead of growing the window. -->
+            <ScrollViewer x:Name="ChangelogScroll" VerticalScrollBarVisibility="Auto" Height="300">
+              <StackPanel x:Name="ChangelogContent" Margin="0,0,12,0"/>
+            </ScrollViewer>
+          </DockPanel>
+
+          <StackPanel x:Name="AskTrayPanel" Visibility="Hidden" VerticalAlignment="Center">
+            <TextBlock Text="&#xE7E8;" FontFamily="Segoe MDL2 Assets" FontSize="34" Foreground="#FF2ECC71"
+                       HorizontalAlignment="Center"/>
+            <TextBlock Text="Keep it running in the tray?" Foreground="{StaticResource Text}" FontSize="18"
+                       FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,14,0,8"/>
+            <TextBlock Foreground="{StaticResource Muted}" FontSize="13" TextWrapping="Wrap" TextAlignment="Center"
+                       Text="Closing the window can leave the timer running in the system tray, ready when you need it. Or the app can quit and stop the timer."/>
+            <Button x:Name="TrayYesBtn" Style="{StaticResource PrimaryButton}" Content="Keep running in the tray"
+                    Height="46" Margin="0,22,0,0" FontSize="14"/>
+            <Button x:Name="TrayNoBtn" Style="{StaticResource GhostButton}" Content="Quit the app" Height="38" Margin="0,8,0,0"/>
+            <TextBlock Text="You can change this later in Settings." Foreground="{StaticResource Muted}" FontSize="11"
+                       HorizontalAlignment="Center" Margin="0,10,0,0"/>
           </StackPanel>
         </Grid>
 

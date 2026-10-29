@@ -29,6 +29,15 @@ namespace DeadMansSwitch
         [DataMember(Order = 4)] public bool? PlaySound { get; set; }
         [DataMember(Order = 5)] public bool? CheckForUpdates { get; set; }
 
+        /// <summary>Hide to the tray instead of quitting when closed. Null until the user is first asked.</summary>
+        [DataMember(Order = 6)] public bool? CloseToTray { get; set; }
+
+        /// <summary>The installed version whose changelog was last shown on start.</summary>
+        [DataMember(Order = 7)] public string SeenChangelogFor { get; set; }
+
+        /// <summary>The newest available release whose notes were already shown.</summary>
+        [DataMember(Order = 8)] public string SeenReleaseNotesFor { get; set; }
+
         public Settings() => Normalize();
 
         public EndAction EndAction

@@ -6,6 +6,30 @@ Versions are `MAJOR.MINOR` with a single-digit minor that rolls over after 9
 
 ## [Unreleased]
 
+## [1.2] - 2026-10-29
+
+### Added
+- Tray icon, if you want it. The first time you close the window, the app asks
+  whether to keep running in the tray or quit, and remembers your answer
+  (change it in Settings). From the tray: click to open, or right-click for
+  I'm here, Pause and Quit. Hover to see the time left. The final warning
+  still pops the window up.
+- **Pause** button to freeze the countdown; **Resume** carries on from where it was.
+- Press **Space** during the final warning to reset the timer.
+- **Reset to defaults** in Settings.
+- Click the version in the title bar to see what's new. The changelog also
+  opens by itself the first time a new version runs, and when a newer
+  version is out but not installed yet, with an Update button.
+- Checks for updates every 6 hours while running, not just at start.
+- Only one copy runs at a time; starting it again brings up the one already running.
+
+### Changed
+- Downloads carry the version in the file name, e.g. `DeadMansSwitch-1.2.exe`.
+  Updating a file named that way saves the new version under its own name
+  and removes the old one.
+- "Stop timer and close" is now "Stop timer and quit"; the × button follows
+  your tray choice.
+
 ## [1.1] - 2026-10-29
 
 First versioned release, rewritten as a native Windows app (C# / WPF on

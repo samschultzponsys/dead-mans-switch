@@ -24,7 +24,12 @@ jobs:
       - uses: actions/checkout@v5
 
       - name: Build
-        run: dotnet build src/DeadMansSwitch/DeadMansSwitch.csproj -c Release -o dist
+        shell: pwsh
+        run: |
+          dotnet build src/DeadMansSwitch/DeadMansSwitch.csproj -c Release -o dist
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $version = (Get-Content VERSION -Raw).Trim()
+          Copy-Item dist\DeadMansSwitch.exe "dist\DeadMansSwitch-$version.exe"
 
       # The window's XAML is only parsed at runtime, so build success alone
       # doesn't prove the app starts.
@@ -39,7 +44,7 @@ jobs:
       - uses: actions/upload-artifact@v5
         with:
           name: DeadMansSwitch
-          path: dist/DeadMansSwitch.exe
+          path: dist/DeadMansSwitch-*.exe
 
       # Renders the real window in each state, so UI changes can be reviewed
       # without a Windows machine. Informational only; never blocks a release.
@@ -58,18 +63,20 @@ jobs:
           path: screenshots/
 
       # Keeps the latest screenshots on the `screenshots` branch (one commit,
-      # replaced each time) so the README can show them.
+      # replaced each time) so the README can show them. Manual runs on other
+      # branches go to `screenshots-preview`, to review UI changes before release.
       - name: Publish screenshots
-        if: github.ref == 'refs/heads/main'
+        if: github.event_name != 'pull_request'
         continue-on-error: true
         shell: pwsh
         run: |
+          $target = if ("${{ github.ref }}" -eq 'refs/heads/main') { 'screenshots' } else { 'screenshots-preview' }
           cd screenshots
           git init -q -b screenshots
           git add -A
           git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" `
             commit -q -m "Screenshots for ${{ github.sha }}"
-          git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" screenshots
+          git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" "screenshots:$target"
 
       - name: Release new version
         if: github.ref == 'refs/heads/main'
@@ -86,5 +93,6 @@ jobs:
           if ($text -notmatch $pattern) { throw "CHANGELOG.md has no section for $version." }
           Set-Content -Path release-notes.md -Value $Matches[1].Trim()
 
-          gh release create "v$version" dist/DeadMansSwitch.exe --target "${{ github.sha }}" `
+          # DeadMansSwitch.exe is the name 1.1's updater looks for.
+          gh release create "v$version" "dist/DeadMansSwitch-$version.exe" dist/DeadMansSwitch.exe --target "${{ github.sha }}" `
             --title "Dead Man's Switch v$version" --notes-file release-notes.md

@@ -30,11 +30,16 @@
     <Reference Include="System.Xaml" />
     <Reference Include="System.Net.Http" />
     <Reference Include="System.Runtime.Serialization" />
+    <!-- Only for the tray icon; WPF has no NotifyIcon of its own. -->
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Drawing" />
   </ItemGroup>
 
   <ItemGroup>
     <EmbeddedResource Include="MainWindow.xaml" LogicalName="DeadMansSwitch.MainWindow.xaml" />
     <EmbeddedResource Include="../../assets/DeadMansSwitch.png" LogicalName="DeadMansSwitch.icon.png" />
+    <EmbeddedResource Include="../../assets/DeadMansSwitch.ico" LogicalName="DeadMansSwitch.icon.ico" />
+    <EmbeddedResource Include="../../CHANGELOG.md" LogicalName="DeadMansSwitch.CHANGELOG.md" />
   </ItemGroup>
 
 </Project>
