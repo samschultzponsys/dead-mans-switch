@@ -17,7 +17,7 @@ jobs:
   build:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Check tag matches VERSION
         if: startsWith(github.ref, 'refs/tags/')
@@ -41,10 +41,26 @@ jobs:
           Get-Content out.txt, err.txt
           if ($p.ExitCode -ne 0) { throw "Self-test failed with exit code $($p.ExitCode)" }
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: DeadMansSwitch
           path: dist/DeadMansSwitch.exe
+
+      # Renders the real window in each state, so UI changes can be reviewed
+      # without a Windows machine. Informational only; never blocks a release.
+      - name: Screenshots
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $p = Start-Process dist\DeadMansSwitch.exe -ArgumentList '--screenshot', 'screenshots' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Screenshot run failed with exit code $($p.ExitCode)" }
+          Get-ChildItem screenshots
+
+      - uses: actions/upload-artifact@v5
+        continue-on-error: true
+        with:
+          name: screenshots
+          path: screenshots/
 
       - name: Extract release notes from CHANGELOG
         if: startsWith(github.ref, 'refs/tags/')

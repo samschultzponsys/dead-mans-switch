@@ -345,6 +345,48 @@ namespace DeadMansSwitch
             }
         }
 
+        /// <summary>
+        /// Renders the check, warning and settings states to PNGs without
+        /// showing the window (used by --screenshot, so CI can show the UI).
+        /// </summary>
+        public void SaveScreenshots(string dir)
+        {
+            // An unshown window can't be captured, so render its content on its
+            // own, taking the styles along with it.
+            var content = (FrameworkElement)Window.Content;
+            var resources = Window.Resources;
+            Window.Resources = new ResourceDictionary();
+            Window.Content = null;
+            content.Resources = resources;
+            System.IO.Directory.CreateDirectory(dir);
+
+            void Shot(string name, double secondsLeft)
+            {
+                deadline = DateTime.Now.AddSeconds(secondsLeft);
+                Refresh();
+                background.BeginAnimation(SolidColorBrush.ColorProperty, null);   // skip the fade
+                content.Measure(new Size(Window.Width, double.PositiveInfinity));
+                content.Arrange(new Rect(content.DesiredSize));
+                content.UpdateLayout();
+                const double scale = 2;
+                var bitmap = new RenderTargetBitmap((int)Math.Ceiling(content.ActualWidth * scale),
+                    (int)Math.Ceiling(content.ActualHeight * scale), 96 * scale, 96 * scale, PixelFormats.Pbgra32);
+                bitmap.Render(content);
+                var png = new PngBitmapEncoder { Frames = { BitmapFrame.Create(bitmap) } };
+                using var file = System.IO.File.Create(System.IO.Path.Combine(dir, name + ".png"));
+                png.Save(file);
+            }
+
+            StartCheck();
+            background.Color = NormalBg;
+            Shot("1-check", phaseSeconds * 0.62);
+            StartWarning();
+            background.Color = WarnBg;
+            Shot("2-warning", 23.4);
+            ShowSettings(true);
+            Shot("3-settings", 23.4);
+        }
+
         /// <summary>Runs both phases and the settings panel without showing the window (used by --selftest).</summary>
         public void SelfTest()
         {

@@ -11,6 +11,12 @@ namespace DeadMansSwitch
         static int Main(string[] args)
         {
             if (args.Contains("--selftest")) return SelfTest();
+            int shot = Array.IndexOf(args, "--screenshot");
+            if (shot >= 0 && shot + 1 < args.Length)
+            {
+                new MainView(new Settings { PlaySound = false }).SaveScreenshots(args[shot + 1]);
+                return 0;
+            }
 
             Updater.CleanUpAfterUpdate();
             var app = new Application();
