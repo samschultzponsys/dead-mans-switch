@@ -6,15 +6,12 @@
         1.1, 1.2 ... 1.9, 2.0, 2.1 ... 2.9, 3.0 ...
     Updates VERSION (the build stamps it into the exe) and turns the
     CHANGELOG's "Unreleased" section into a dated section for the new version.
-    With -Tag, also commits and creates the vMAJOR.MINOR git tag; pushing that
-    tag makes GitHub Actions build the exe and publish the release.
+    Pushing the result to main releases it: GitHub Actions sees a VERSION
+    with no release yet, tags it vMAJOR.MINOR and publishes the exe.
 .EXAMPLE
-    .\tools\Bump-Version.ps1            # 1.1 -> 1.2, edit files only
-.EXAMPLE
-    .\tools\Bump-Version.ps1 -Tag       # also commit + tag v1.2
-    git push --follow-tags
+    .\tools\Bump-Version.ps1            # 1.1 -> 1.2
+    git commit -am "Release v1.2"; git push
 #>
-param([switch]$Tag)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 
@@ -39,10 +36,4 @@ Set-Content -Path $changelog -Value $text -NoNewline
 
 Set-Content -Path $versionFile -Value $next
 
-Write-Host "Version $current -> $next"
-if ($Tag) {
-    git -C $root add VERSION CHANGELOG.md
-    git -C $root commit -m "Release v$next"
-    git -C $root tag -a "v$next" -m "v$next"   # annotated, so --follow-tags pushes it
-    Write-Host "Tagged v$next. Push with: git push --follow-tags"
-}
+Write-Host "Version $current -> $next. Commit and push to main to release it."

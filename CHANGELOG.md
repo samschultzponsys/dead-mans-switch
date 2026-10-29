@@ -28,10 +28,9 @@ packaging was often flagged by antivirus.
   swaps it in and restarts.
 - App icon, embedded in the exe, and the version shown in the title bar and the
   exe's file properties.
-- `tools/Bump-Version.ps1` to move to the next version, date the changelog and
-  tag the release.
+- `tools/Bump-Version.ps1` to move to the next version and date the changelog.
 - GitHub Actions build on Windows for every push, with a self-test
-  (`--selftest`), and a GitHub Release for each `v*` tag.
+  (`--selftest`). A push to `main` with a new `VERSION` publishes that release.
 
 ### Fixed
 - The button said "add 10 minutes" but restarted a 5-minute period.

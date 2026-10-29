@@ -69,24 +69,22 @@ after 9:
 
 Each release moves up by exactly one step. The current version is in the
 `VERSION` file, which the build stamps into the exe. Releases are tagged
-`vMAJOR.MINOR` (for example `v1.2`).
+`vMAJOR.MINOR` (for example `v1.2`) by the build.
 
 ## Making a release
 
 1. Note the changes under `## [Unreleased]` in `CHANGELOG.md`.
-2. Bump the version, commit and tag:
+2. Move to the next version, which also dates that changelog section:
    ```powershell
-   .\tools\Bump-Version.ps1 -Tag
+   .\tools\Bump-Version.ps1
    ```
-3. Push the commit and tag:
-   ```powershell
-   git push --follow-tags
-   ```
+3. Commit and push to `main`.
 
 GitHub Actions builds every push to `main` on Windows and runs the app's
-self-test; the exe is attached to each run as a download. When the push is a
-`v*` tag, it also publishes a GitHub Release with the changelog section as its
-notes. Installed copies pick it up the next time they open.
+self-test; the exe is attached to each run as a download. When `VERSION`
+holds a version that hasn't been released yet, the run also tags it
+`vMAJOR.MINOR` and publishes a GitHub Release with the changelog section as
+its notes. Installed copies pick it up the next time they open.
 
 ## Building locally
 
@@ -116,7 +114,7 @@ src/DeadMansSwitch/
   Updater.cs                  GitHub release check and exe swap
   Program.cs                  entry point and --selftest
 assets/DeadMansSwitch.ico     app icon (tools/make_icon.py redraws it)
-tools/Bump-Version.ps1        version bump + changelog + tag
+tools/Bump-Version.ps1        version bump + changelog
 .github/workflows/build.yml   Windows build, self-test and releases
 VERSION                       current version
 CHANGELOG.md                  release history
