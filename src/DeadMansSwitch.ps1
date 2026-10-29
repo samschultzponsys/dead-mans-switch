@@ -11,8 +11,11 @@
     Build: .\build\Build.ps1   (wraps Invoke-ps2exe and stamps the version)
 #>
 # ===================== CONFIG =====================
+# Default timer lengths; the values set in the window are saved to
+# $SettingsFile and take over from these on the next start.
 $ExtendSeconds = 300
 $WarnSeconds   = 60
+$SettingsFile  = Join-Path $env:APPDATA 'DeadMansSwitch\settings.json'
 $TickMs        = 250
 $AllowCancel   = $true
 $PlaySound     = $true
@@ -37,6 +40,27 @@ public class SGfg {
   [DllImport("user32.dll")] public static extern void keybd_event(byte k, byte s, uint f, UIntPtr e);
 }
 "@
+
+# ----- saved settings -----
+$MinCheckMinutes = 1;  $MaxCheckMinutes = 1440   # 1 minute .. 24 hours
+$MinWarnSeconds  = 10; $MaxWarnSeconds  = 600
+
+function Read-Settings {
+    try {
+        $s = Get-Content $SettingsFile -Raw -ErrorAction Stop | ConvertFrom-Json
+        $m = [int]$s.CheckMinutes; $w = [int]$s.WarnSeconds
+        if ($m -ge $MinCheckMinutes -and $m -le $MaxCheckMinutes) { $script:ExtendSeconds = $m * 60 }
+        if ($w -ge $MinWarnSeconds  -and $w -le $MaxWarnSeconds)  { $script:WarnSeconds   = $w }
+    } catch { }   # no file yet or unreadable: keep the defaults
+}
+
+function Save-Settings {
+    New-Item -ItemType Directory -Force -Path (Split-Path $SettingsFile) | Out-Null
+    [pscustomobject]@{ CheckMinutes = [int]($ExtendSeconds / 60); WarnSeconds = $WarnSeconds } |
+        ConvertTo-Json | Set-Content -Path $SettingsFile -Encoding UTF8
+}
+
+Read-Settings
 
 # ----- updater -----
 # Asks GitHub for the latest release; if its tag is newer than $AppVersion and it
@@ -98,7 +122,7 @@ if ($CheckForUpdates) {
 [xml]$xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Dead Man's Switch" Width="480" Height="330"
+        Title="Dead Man's Switch" Width="480" Height="390"
         WindowStartupLocation="CenterScreen" Topmost="True"
         ResizeMode="NoResize" Background="#FF1E2026">
   <StackPanel Margin="16">
@@ -120,10 +144,22 @@ if ($CheckForUpdates) {
       <Border x:Name="WarnFill" Background="#FF787D87" Width="432" HorizontalAlignment="Left"/>
     </Border>
 
-    <Button x:Name="ExtendBtn" Content="I'm here  -  add 10 minutes" Height="42" Margin="0,16,0,8"
+    <Button x:Name="ExtendBtn" Content="I'm here" Height="42" Margin="0,16,0,8"
             Background="#FF27AE60" Foreground="White" FontSize="14" FontWeight="Bold" BorderThickness="0"/>
     <Button x:Name="CancelBtn" Content="Cancel shutdown timer" Height="28"
             Background="#FF1E2026" Foreground="#FFEBEBEB" FontSize="12"/>
+
+    <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
+      <TextBlock Text="Check every" FontFamily="Segoe UI" FontSize="12" Foreground="#FFEBEBEB" VerticalAlignment="Center"/>
+      <TextBox x:Name="CheckMinBox" Width="44" Margin="6,0,4,0" FontSize="12" TextAlignment="Center"/>
+      <TextBlock Text="min" FontFamily="Segoe UI" FontSize="12" Foreground="#FFEBEBEB" VerticalAlignment="Center"/>
+      <TextBlock Text="Final warning" FontFamily="Segoe UI" FontSize="12" Foreground="#FFEBEBEB"
+                 VerticalAlignment="Center" Margin="18,0,0,0"/>
+      <TextBox x:Name="WarnSecBox" Width="44" Margin="6,0,4,0" FontSize="12" TextAlignment="Center"/>
+      <TextBlock Text="sec" FontFamily="Segoe UI" FontSize="12" Foreground="#FFEBEBEB" VerticalAlignment="Center"/>
+      <Button x:Name="SaveBtn" Content="Save" Width="60" Margin="18,0,0,0" FontSize="12"/>
+    </StackPanel>
+    <TextBlock x:Name="SettingsMsg" Text="" FontFamily="Segoe UI" FontSize="11" Foreground="#FFB0B4BC" Margin="0,4,0,0"/>
   </StackPanel>
 </Window>
 "@
@@ -136,7 +172,14 @@ $Title=$win.FindName("Title"); $Status=$win.FindName("Status")
 $ExtendFill=$win.FindName("ExtendFill"); $WarnFill=$win.FindName("WarnFill")
 $WarnLabel=$win.FindName("WarnLabel")
 $ExtendBtn=$win.FindName("ExtendBtn"); $CancelBtn=$win.FindName("CancelBtn")
+$CheckMinBox=$win.FindName("CheckMinBox"); $WarnSecBox=$win.FindName("WarnSecBox")
+$SaveBtn=$win.FindName("SaveBtn"); $SettingsMsg=$win.FindName("SettingsMsg")
 if (-not $AllowCancel) { $CancelBtn.Visibility = 'Collapsed' }
+
+function Show-Settings {
+    $CheckMinBox.Text = [int]($ExtendSeconds / 60); $WarnSecBox.Text = $WarnSeconds
+    $ExtendBtn.Content = "I'm here  -  reset to $([int]($ExtendSeconds / 60)) min"
+}
 
 $TrackWidth = 432.0
 function NewBrush([int]$r,[int]$g,[int]$b){ New-Object System.Windows.Media.SolidColorBrush ([System.Windows.Media.Color]::FromRgb($r,$g,$b)) }
@@ -212,11 +255,29 @@ $timer.Add_Tick({
 })
 
 $ExtendBtn.Add_Click({ Invoke-Extend })
+
+# New lengths apply right away to a running check period; during a final
+# warning they apply from the next check.
+$SaveBtn.Add_Click({
+    $m = 0; $w = 0
+    if (-not [int]::TryParse($CheckMinBox.Text.Trim(), [ref]$m) -or $m -lt $MinCheckMinutes -or $m -gt $MaxCheckMinutes) {
+        $SettingsMsg.Text = "Check interval must be $MinCheckMinutes-$MaxCheckMinutes minutes."; return
+    }
+    if (-not [int]::TryParse($WarnSecBox.Text.Trim(), [ref]$w) -or $w -lt $MinWarnSeconds -or $w -gt $MaxWarnSeconds) {
+        $SettingsMsg.Text = "Final warning must be $MinWarnSeconds-$MaxWarnSeconds seconds."; return
+    }
+    $script:ExtendSeconds = $m * 60; $script:WarnSeconds = $w
+    try { Save-Settings; $SettingsMsg.Text = "Saved. Used from now on and next time the app opens." }
+    catch { $SettingsMsg.Text = "Applied, but could not save: $($_.Exception.Message)" }
+    Show-Settings
+    if ($script:phase -eq 'extend') { Invoke-Extend }
+})
 $CancelBtn.Add_Click({ $script:reallyClose=$true; $timer.Stop(); $win.Close() })
 $win.Add_Closing({ if(-not $script:reallyClose -and -not $AllowCancel){ $_.Cancel=$true } })
 
 # ----- go -----
 $win.Add_ContentRendered({
+    Show-Settings
     Invoke-Extend
     $Status.Text="Next check in "+(Fmt $ExtendSeconds)
     $timer.Start()

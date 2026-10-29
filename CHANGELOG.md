@@ -9,14 +9,20 @@ Versions are `MAJOR.MINOR` with a single-digit minor that rolls over after 9
 ## [1.1] - 2026-10-29
 
 First versioned release. The source was recovered from the existing
-`DeadManSwitchWin.exe` (a ps2exe build with file version 0.0.0.0). The timer
-itself works the same as before.
+`DeadManSwitchWin.exe` (a ps2exe build with file version 0.0.0.0).
+
+### Fixed
+- The button said "add 10 minutes" but restarted a 5-minute period. It now
+  shows the actual interval ("reset to 5 min").
 
 ### Changed
 - Renamed from "Shutdown Guard" to **Dead Man's Switch**. The exe is now
   `DeadMansSwitch.exe` and the script `src/DeadMansSwitch.ps1`.
 
 ### Added
+- Timer settings in the window: set the check interval and the final-warning
+  length and click Save. They're saved to `%APPDATA%\DeadMansSwitch\settings.json`
+  and used every time the app opens.
 - App icon (a red power symbol), embedded in the exe.
 - Automatic updater: on startup, checks this repo's latest GitHub Release and,
   if it is newer, offers to download and install it. The exe is swapped and

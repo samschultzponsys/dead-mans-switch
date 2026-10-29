@@ -7,10 +7,10 @@ a game server) without it staying on all night if you fall asleep or walk away.
 ## How it works
 
 1. A window opens on top of everything with a green **"Time until next check"**
-   bar that drains over 5 minutes.
+   bar that drains over the check interval (5 minutes unless you change it).
 2. Clicking **"I'm here"** refills the bar and starts the period again.
-3. If the bar runs out, the window turns red and a **60-second final warning**
-   starts. It plays a sound and pulls itself to the foreground every 2 seconds.
+3. If the bar runs out, the window turns red and the **final warning** starts
+   (60 seconds unless you change it). It plays a sound and pulls itself to the foreground every 2 seconds.
 4. If nobody clicks before the warning ends, the PC shuts down
    (`shutdown /s /f /t 0`, which forces open apps to close).
 
@@ -28,15 +28,25 @@ To run the script directly instead:
 powershell -ExecutionPolicy Bypass -WindowStyle Hidden -File src\DeadMansSwitch.ps1
 ```
 
-## Configuration
+## Timer settings
 
-Settings live in the `CONFIG` block at the top of `src/DeadMansSwitch.ps1`.
+Set the timers at the bottom of the window: **Check every** (1-1440 minutes)
+and **Final warning** (10-600 seconds), then click **Save**. A running check
+period restarts with the new length straight away; during a final warning
+the new lengths apply from the next check.
+
+Saved values are stored in `%APPDATA%\DeadMansSwitch\settings.json` and are
+used every time the app opens. Delete that file to go back to the defaults.
+
+## Other configuration
+
+These live in the `CONFIG` block at the top of `src/DeadMansSwitch.ps1`.
 Changing them in the exe means rebuilding it (see Building).
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `$ExtendSeconds` | `300` | Length of each "next check" period, in seconds |
-| `$WarnSeconds` | `60` | Length of the final warning, in seconds |
+| `$ExtendSeconds` | `300` | Default check interval, in seconds, until one is saved |
+| `$WarnSeconds` | `60` | Default final warning, in seconds, until one is saved |
 | `$TickMs` | `250` | How often the countdown text refreshes, in ms |
 | `$AllowCancel` | `$true` | Show the Cancel button and allow closing the window |
 | `$PlaySound` | `$true` | Play a warning sound when the final warning starts |
@@ -108,8 +118,3 @@ assets/DeadMansSwitch.ico   app icon, embedded in the exe
 VERSION                     current version
 CHANGELOG.md                release history
 ```
-
-## Known issues
-
-- The button says **"add 10 minutes"**, but it actually restarts the
-  5-minute period (`$ExtendSeconds = 300`).
