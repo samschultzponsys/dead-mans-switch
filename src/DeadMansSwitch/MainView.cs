@@ -369,8 +369,9 @@ namespace DeadMansSwitch
                 content.Arrange(new Rect(0, 0, Window.Width, content.DesiredSize.Height));
                 content.UpdateLayout();
                 const double scale = 2;
-                var bitmap = new RenderTargetBitmap((int)Math.Ceiling(content.ActualWidth * scale),
-                    (int)Math.Ceiling(content.ActualHeight * scale), 96 * scale, 96 * scale, PixelFormats.Pbgra32);
+                // DesiredSize includes the outer margin that holds the shadow; ActualWidth doesn't.
+                var bitmap = new RenderTargetBitmap((int)Math.Ceiling(Window.Width * scale),
+                    (int)Math.Ceiling(content.DesiredSize.Height * scale), 96 * scale, 96 * scale, PixelFormats.Pbgra32);
                 bitmap.Render(content);
                 var png = new PngBitmapEncoder { Frames = { BitmapFrame.Create(bitmap) } };
                 using var file = System.IO.File.Create(System.IO.Path.Combine(dir, name + ".png"));

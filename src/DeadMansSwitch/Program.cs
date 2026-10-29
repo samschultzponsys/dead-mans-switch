@@ -14,7 +14,7 @@ namespace DeadMansSwitch
             int shot = Array.IndexOf(args, "--screenshot");
             if (shot >= 0 && shot + 1 < args.Length)
             {
-                new MainView(new Settings { PlaySound = false }).SaveScreenshots(args[shot + 1]);
+                new MainView(new Settings()).SaveScreenshots(args[shot + 1]);   // defaults, as a new user sees them
                 return 0;
             }
 
