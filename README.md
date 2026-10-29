@@ -4,6 +4,12 @@ A small Windows app that shuts the PC down unless someone keeps confirming
 they're still there. Useful for leaving a machine running (a download, a render,
 a game server) without it staying on all night if you fall asleep or walk away.
 
+<p>
+  <img src="https://raw.githubusercontent.com/samschultzponsys/dead-mans-switch/screenshots/check.png" width="260" alt="Countdown to the next check">
+  <img src="https://raw.githubusercontent.com/samschultzponsys/dead-mans-switch/screenshots/warning.png" width="260" alt="Final warning">
+  <img src="https://raw.githubusercontent.com/samschultzponsys/dead-mans-switch/screenshots/settings.png" width="260" alt="Settings">
+</p>
+
 ## How it works
 
 1. A window stays on top with a green ring counting down to the next check

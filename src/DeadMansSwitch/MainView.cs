@@ -174,7 +174,7 @@ namespace DeadMansSwitch
             warnTicks = 0;
             ringPath.Stroke = RedRing;
             AnimateBackground(WarnBg);
-            extendBtn.Content = "I'm here  -  keep the PC on";
+            extendBtn.Content = "I'm still here – keep it on";
             timeLabel.Text = "seconds until " + ActionNoun;
             statusText.Text = "Final warning. Click below if you're still here.";
             ShowSettings(false);
@@ -366,7 +366,7 @@ namespace DeadMansSwitch
                 Refresh();
                 background.BeginAnimation(SolidColorBrush.ColorProperty, null);   // skip the fade
                 content.Measure(new Size(Window.Width, double.PositiveInfinity));
-                content.Arrange(new Rect(content.DesiredSize));
+                content.Arrange(new Rect(0, 0, Window.Width, content.DesiredSize.Height));
                 content.UpdateLayout();
                 const double scale = 2;
                 var bitmap = new RenderTargetBitmap((int)Math.Ceiling(content.ActualWidth * scale),
@@ -379,12 +379,12 @@ namespace DeadMansSwitch
 
             StartCheck();
             background.Color = NormalBg;
-            Shot("1-check", phaseSeconds * 0.62);
-            StartWarning();
-            background.Color = WarnBg;
-            Shot("2-warning", 23.4);
+            Shot("check", phaseSeconds * 0.62);
             ShowSettings(true);
-            Shot("3-settings", 23.4);
+            Shot("settings", phaseSeconds * 0.62);
+            StartWarning();   // also closes settings
+            background.Color = WarnBg;
+            Shot("warning", 23.4);
         }
 
         /// <summary>Runs both phases and the settings panel without showing the window (used by --selftest).</summary>

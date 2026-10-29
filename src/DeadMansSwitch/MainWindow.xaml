@@ -71,7 +71,7 @@
       <Setter Property="Foreground" Value="{StaticResource Text}"/>
       <Setter Property="CaretBrush" Value="{StaticResource Text}"/>
       <Setter Property="FontSize" Value="14"/>
-      <Setter Property="Padding" Value="8,6"/>
+      <Setter Property="Padding" Value="8,4"/>
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="TextBox">
