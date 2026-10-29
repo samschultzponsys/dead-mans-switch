@@ -21,8 +21,9 @@ a game server) without it staying on all night if you fall asleep or walk away.
    **Pause** freezes it until you click **Resume**.
 3. If the ring runs out, the window turns red and the **final warning** starts
    (60 seconds unless you change it). It plays a sound and pulls itself to the
-   front every 2 seconds, even if minimized or in the tray. Press **Space** or
-   click the button to reset the timer.
+   front every 2 seconds, even if minimized or in the tray. Press **Space**
+   (it works from any app while the warning is up) or click the button to reset
+   the timer.
 4. If nobody responds before the warning ends, the PC shuts down, restarts or
    hibernates, depending on the setting. Shutdown and restart force open apps
    to close.

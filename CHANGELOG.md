@@ -6,6 +6,21 @@ Versions are `MAJOR.MINOR` with a single-digit minor that rolls over after 9
 
 ## [Unreleased]
 
+## [1.3] - 2026-10-29
+
+### Fixed
+- Space only reset the final warning the first time; later presses opened a
+  small window menu instead. Bringing the window to the front simulated an
+  Alt key press every 2 seconds, and when that landed on the app's own window
+  it switched on Windows' keyboard menu mode. The app now only uses that as a
+  last resort while another window is in front, and ignores menu mode entirely.
+
+### Changed
+- During the final warning, **Space resets the timer from anywhere**, even if
+  another app has the keyboard or Windows won't let the window come forward.
+  Space works normally again as soon as the warning ends.
+- **Enter** also resets the timer during the final warning.
+
 ## [1.2] - 2026-10-29
 
 ### Added

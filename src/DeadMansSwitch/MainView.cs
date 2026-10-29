@@ -58,6 +58,8 @@ namespace DeadMansSwitch
         bool quitting;
         bool trayHintShown;
         bool headless;         // --selftest/--screenshot: never show the real window
+        bool spaceClaimed;     // Space is a system-wide hotkey for this window (final warning only)
+        const int SpaceHotkeyId = 1;
         UpdateInfo update;
         TrayIcon tray;
 
@@ -144,6 +146,22 @@ namespace DeadMansSwitch
             {
                 if (e.Key == Key.Space && phase == Phase.Warn && !failed) { ImHere(); e.Handled = true; }
             };
+            // Swallow keyboard menu mode (a lone Alt tap, or Alt+Space). There's
+            // no menu to show, and while in it the window ignores the next key,
+            // which would stop Space from resetting the warning.
+            Window.SourceInitialized += (s, e) =>
+                HwndSource.FromHwnd(new WindowInteropHelper(Window).Handle).AddHook(
+                    (IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled) =>
+                    {
+                        if (msg == NativeMethods.WM_SYSCOMMAND && (wParam.ToInt64() & 0xFFF0) == NativeMethods.SC_KEYMENU)
+                            handled = true;
+                        else if (msg == NativeMethods.WM_HOTKEY && wParam.ToInt32() == SpaceHotkeyId)
+                        {
+                            if (phase == Phase.Warn && !failed) ImHere();
+                            handled = true;
+                        }
+                        return IntPtr.Zero;
+                    });
             Window.Closing += (s, e) =>
             {
                 if (quitting) return;
@@ -235,6 +253,7 @@ namespace DeadMansSwitch
 
         void StartCheck()
         {
+            ReleaseSpace();
             phase = Phase.Check;
             failed = false;
             paused = false;
@@ -266,6 +285,7 @@ namespace DeadMansSwitch
             ShowPanel(mainPanel);
             if (settings.PlaySound == true) SystemSounds.Exclamation.Play();
             BringToFront();
+            ClaimSpace();
             Refresh();
         }
 
@@ -311,6 +331,7 @@ namespace DeadMansSwitch
         void RunEndAction()
         {
             timer.Stop();
+            ReleaseSpace();
             string args = settings.EndAction switch
             {
                 EndAction.Restart => "/r /f /t 0",
@@ -404,14 +425,32 @@ namespace DeadMansSwitch
             if (headless) return;
             if (!Window.IsVisible) Window.Show();
             if (Window.WindowState == WindowState.Minimized) Window.WindowState = WindowState.Normal;
-            var handle = new WindowInteropHelper(Window).Handle;
-            // A tap of Alt lets this process take the foreground from another app.
-            NativeMethods.keybd_event(NativeMethods.VK_MENU, 0, 0, UIntPtr.Zero);
-            NativeMethods.keybd_event(NativeMethods.VK_MENU, 0, NativeMethods.KEYEVENTF_KEYUP, UIntPtr.Zero);
-            NativeMethods.SetForegroundWindow(handle);
             Window.Topmost = false;
             Window.Topmost = true;
+            NativeMethods.ForceForeground(new WindowInteropHelper(Window).Handle);
             Window.Activate();
+            // Keys go to the focused element, so keep focus on the button: Space
+            // (handled above) and Enter then always work, even if focus was left
+            // in a panel that is now hidden.
+            extendBtn.Focus();
+        }
+
+        /// <summary>
+        /// During the final warning, Space anywhere resets the timer, even when
+        /// Windows won't let this window take the foreground. If another app
+        /// already owns Space as a hotkey, the window's own key handling remains.
+        /// </summary>
+        void ClaimSpace()
+        {
+            if (headless || spaceClaimed) return;
+            spaceClaimed = NativeMethods.ClaimSpace(new WindowInteropHelper(Window).Handle, SpaceHotkeyId);
+        }
+
+        void ReleaseSpace()
+        {
+            if (!spaceClaimed) return;
+            NativeMethods.ReleaseSpace(new WindowInteropHelper(Window).Handle, SpaceHotkeyId);
+            spaceClaimed = false;
         }
 
         void EnsureTray()
@@ -461,6 +500,7 @@ namespace DeadMansSwitch
 
         void Quit()
         {
+            ReleaseSpace();
             quitting = true;
             RemoveTray();
             Window.Close();
