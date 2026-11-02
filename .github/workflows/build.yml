@@ -28,8 +28,6 @@ jobs:
         run: |
           dotnet build src/DeadMansSwitch/DeadMansSwitch.csproj -c Release -o dist
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $version = (Get-Content VERSION -Raw).Trim()
-          Copy-Item dist\DeadMansSwitch.exe "dist\DeadMansSwitch-$version.exe"
 
       # The window's XAML is only parsed at runtime, so build success alone
       # doesn't prove the app starts.
@@ -51,7 +49,8 @@ jobs:
           & $iscc /Q "/DAppVersion=$version" installer\DeadMansSwitch.iss
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      # Installs, runs and uninstalls the real installer, as a user would.
+      # Runs the real installer as a user would: installs, checks and uninstalls,
+      # then sets up a portable copy and checks that nothing reached Windows.
       - name: Test installer
         shell: pwsh
         run: |
@@ -77,12 +76,26 @@ jobs:
           for ($i = 0; $i -lt 30 -and ((Test-Path $exe) -or (Test-Path $key)); $i++) { Start-Sleep -Seconds 1 }
           if (Test-Path $exe) { throw "Uninstall left $exe behind" }
           if (Test-Path $key) { throw "Uninstall left the Apps list entry behind" }
-          Write-Host "Installer test passed (v$version)."
+          Write-Host "Install mode passed (v$version)."
+
+          $portable = Join-Path $env:RUNNER_TEMP 'dms-portable'
+          $p = Start-Process "dist\DeadMansSwitch-Setup-$version.exe" -Wait -PassThru `
+                 -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/PORTABLE', "/DIR=$portable"
+          if ($p.ExitCode -ne 0) { throw "Portable setup exited with code $($p.ExitCode)" }
+          if (-not (Test-Path "$portable\DeadMansSwitch.exe")) { throw "Portable setup did not create the exe" }
+          if (-not (Test-Path "$portable\DeadMansSwitch.portable")) { throw "Portable setup did not leave its marker" }
+          if (Test-Path "$portable\unins000.exe") { throw "Portable setup added an uninstaller" }
+          if (Test-Path $key) { throw "Portable setup added an Apps list entry" }
+          $p = Start-Process "$portable\DeadMansSwitch.exe" -ArgumentList '--selftest', '--expect-portable' -Wait -PassThru `
+                 -RedirectStandardOutput port-out.txt -RedirectStandardError port-err.txt
+          Get-Content port-out.txt, port-err.txt
+          if ($p.ExitCode -ne 0) { throw "The portable copy failed its self-test" }
+          Write-Host "Portable mode passed (v$version)."
 
       - uses: actions/upload-artifact@v5
         with:
-          name: DeadMansSwitch
-          path: dist/DeadMansSwitch-*.exe
+          name: DeadMansSwitch-Setup
+          path: dist/DeadMansSwitch-Setup-*.exe
 
       # Renders the real window in each state, so UI changes can be reviewed
       # without a Windows machine. Informational only; never blocks a release.
@@ -131,7 +144,5 @@ jobs:
           if ($text -notmatch $pattern) { throw "CHANGELOG.md has no section for $version." }
           Set-Content -Path release-notes.md -Value $Matches[1].Trim()
 
-          # DeadMansSwitch.exe is the name 1.1's updater looks for.
-          gh release create "v$version" "dist/DeadMansSwitch-Setup-$version.exe" "dist/DeadMansSwitch-$version.exe" `
-            dist/DeadMansSwitch.exe --target "${{ github.sha }}" `
+          gh release create "v$version" "dist/DeadMansSwitch-Setup-$version.exe" --target "${{ github.sha }}" `
             --title "Dead Man's Switch v$version" --notes-file release-notes.md

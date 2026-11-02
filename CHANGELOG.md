@@ -6,6 +6,30 @@ Versions are `MAJOR.MINOR` with a single-digit minor that rolls over after 9
 
 ## [Unreleased]
 
+## [1.5] - 2026-11-02
+
+### Changed
+- **One download.** Releases now ship only `DeadMansSwitch-Setup-1.5.exe`. Its
+  first page asks whether to **install** the app or set it up as **portable**
+  in a folder you choose. A portable copy adds nothing to Windows and keeps its
+  settings in its own folder, starting from the settings you had before.
+- Updates always go through the installer, so portable copies update in their
+  own folder too.
+
+### Added
+- **Automatic updates at launch.** With "Install them automatically" on (the
+  default), the app installs a newer version as soon as it opens, then reopens.
+  While running it still just offers updates, so a countdown is never
+  interrupted.
+- **GitHub token** in Settings, for update checks and downloads if the
+  repository is private or GitHub limits anonymous checks. It's checked with
+  GitHub when you save and stored encrypted for your Windows account.
+
+### Upgrading from 1.4 or earlier
+- Older versions look for downloads that releases no longer include, so they
+  won't find 1.5 on their own. Run `DeadMansSwitch-Setup-1.5.exe` once; from
+  then on updates are automatic.
+
 ## [1.4] - 2026-11-02
 
 ### Added

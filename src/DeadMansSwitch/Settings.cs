@@ -1,7 +1,9 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Json;
+using System.Security.Cryptography;
 using System.Text;
 
 namespace DeadMansSwitch
@@ -9,7 +11,8 @@ namespace DeadMansSwitch
     public enum EndAction { Shutdown, Restart, Hibernate }
 
     /// <summary>
-    /// User settings, stored as JSON in %APPDATA%\DeadMansSwitch\settings.json.
+    /// User settings, stored as JSON in %APPDATA%\DeadMansSwitch\settings.json,
+    /// or beside the exe for a portable copy.
     /// Fields are nullable because the serializer leaves missing keys null
     /// (older files only have CheckMinutes and WarnSeconds); <see cref="Normalize"/>
     /// fills those and any out-of-range values with defaults.
@@ -20,8 +23,18 @@ namespace DeadMansSwitch
         public const int MinCheckMinutes = 1, MaxCheckMinutes = 1440;
         public const int MinWarnSeconds = 10, MaxWarnSeconds = 600;
 
-        public static readonly string FilePath = Path.Combine(
+        static readonly string AppDataPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "DeadMansSwitch", "settings.json");
+
+        static string ExeDir => Path.GetDirectoryName(Process.GetCurrentProcess().MainModule.FileName);
+
+        /// <summary>True when the installer set this copy up as portable (it leaves a marker file beside the exe).</summary>
+        public static bool IsPortable => File.Exists(Path.Combine(ExeDir, "DeadMansSwitch.portable"));
+
+        public static readonly string FilePath = IsPortable ? Path.Combine(ExeDir, "settings.json") : AppDataPath;
+
+        // Ties the encrypted token to this app as well as to the Windows account.
+        static readonly byte[] TokenEntropy = Encoding.UTF8.GetBytes("DeadMansSwitch.GitHubToken");
 
         [DataMember(Order = 1)] public int? CheckMinutes { get; set; }
         [DataMember(Order = 2)] public int? WarnSeconds { get; set; }
@@ -37,6 +50,32 @@ namespace DeadMansSwitch
 
         /// <summary>The newest available release whose notes were already shown.</summary>
         [DataMember(Order = 8)] public string SeenReleaseNotesFor { get; set; }
+
+        /// <summary>Install a newer version as soon as the app opens.</summary>
+        [DataMember(Order = 9)] public bool? AutoInstallUpdates { get; set; }
+
+        /// <summary>The GitHub token, encrypted for the current Windows account (DPAPI). Use <see cref="GitHubToken"/>.</summary>
+        [DataMember(Order = 10)] public string GitHubTokenProtected { get; set; }
+
+        /// <summary>
+        /// Optional GitHub token for update checks and downloads. Null when none is
+        /// saved, or when the saved one can't be decrypted (another account or PC).
+        /// </summary>
+        public string GitHubToken
+        {
+            get
+            {
+                if (string.IsNullOrEmpty(GitHubTokenProtected)) return null;
+                try
+                {
+                    var bytes = ProtectedData.Unprotect(Convert.FromBase64String(GitHubTokenProtected), TokenEntropy, DataProtectionScope.CurrentUser);
+                    return Encoding.UTF8.GetString(bytes);
+                }
+                catch (Exception) { return null; }
+            }
+            set => GitHubTokenProtected = string.IsNullOrEmpty(value) ? null : Convert.ToBase64String(
+                ProtectedData.Protect(Encoding.UTF8.GetBytes(value), TokenEntropy, DataProtectionScope.CurrentUser));
+        }
 
         public Settings() => Normalize();
 
@@ -56,10 +95,13 @@ namespace DeadMansSwitch
             EndAction = EndAction;   // rewrites unknown names as Shutdown
             PlaySound ??= true;
             CheckForUpdates ??= true;
+            AutoInstallUpdates ??= true;
         }
 
         public static Settings Load(string path = null)
         {
+            // A portable copy's first run starts from the settings it had before.
+            if (path == null && !File.Exists(FilePath) && File.Exists(AppDataPath)) path = AppDataPath;
             try
             {
                 using var stream = File.OpenRead(path ?? FilePath);

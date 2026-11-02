@@ -17,7 +17,8 @@ namespace DeadMansSwitch
         [STAThread]
         static int Main(string[] args)
         {
-            if (args.Contains("--selftest")) return SelfTest(expectInstalled: args.Contains("--expect-installed"));
+            if (args.Contains("--selftest"))
+                return SelfTest(expectInstalled: args.Contains("--expect-installed"), expectPortable: args.Contains("--expect-portable"));
             int shot = Array.IndexOf(args, "--screenshot");
             if (shot >= 0 && shot + 1 < args.Length)
             {
@@ -70,26 +71,36 @@ namespace DeadMansSwitch
         /// CI runs this on Windows, since the XAML is only parsed at runtime.
         /// Exit code 0 means it passed.
         /// </summary>
-        static int SelfTest(bool expectInstalled)
+        static int SelfTest(bool expectInstalled, bool expectPortable)
         {
             try
             {
                 if (Updater.IsInstalled != expectInstalled)
-                    throw new Exception(expectInstalled ? "Not recognised as installed." : "A portable copy thinks it's installed.");
+                    throw new Exception(expectInstalled ? "Not recognised as installed." : "A copy that wasn't installed thinks it is.");
+                if (Settings.IsPortable != expectPortable)
+                    throw new Exception(expectPortable ? "Not recognised as portable." : "Thinks it's portable.");
+                string expectedDir = expectPortable
+                    ? AppDomain.CurrentDomain.BaseDirectory
+                    : Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+                if (!Settings.FilePath.StartsWith(expectedDir.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase))
+                    throw new Exception($"Settings would be saved in the wrong place: {Settings.FilePath}");
 
                 string path = Path.Combine(Path.GetTempPath(), $"dms-selftest-{Guid.NewGuid():N}.json");
-                var saved = new Settings { CheckMinutes = 90, WarnSeconds = 45, EndAction = EndAction.Hibernate, PlaySound = false, CloseToTray = true };
+                var saved = new Settings { CheckMinutes = 90, WarnSeconds = 45, EndAction = EndAction.Hibernate, PlaySound = false, CloseToTray = true,
+                                           AutoInstallUpdates = false, GitHubToken = "ghp_selftest" };
                 saved.Save(path);
                 var loaded = Settings.Load(path);
                 File.Delete(path);
                 if (loaded.CheckMinutes != 90 || loaded.WarnSeconds != 45 || loaded.EndAction != EndAction.Hibernate
-                    || loaded.PlaySound != false || loaded.CloseToTray != true)
+                    || loaded.PlaySound != false || loaded.CloseToTray != true || loaded.AutoInstallUpdates != false
+                    || loaded.GitHubToken != "ghp_selftest" || saved.GitHubTokenProtected.Contains("selftest"))
                     throw new Exception("Settings did not survive a save and load.");
 
                 File.WriteAllText(path, "{\"CheckMinutes\": 0, \"WarnSeconds\": 60}");   // older, partial file
                 var partial = Settings.Load(path);
                 File.Delete(path);
-                if (partial.CheckMinutes != 5 || partial.PlaySound != true || partial.EndAction != EndAction.Shutdown || partial.CloseToTray != null)
+                if (partial.CheckMinutes != 5 || partial.PlaySound != true || partial.EndAction != EndAction.Shutdown || partial.CloseToTray != null
+                    || partial.AutoInstallUpdates != true || partial.GitHubToken != null)
                     throw new Exception("Settings defaults were not applied to a partial file.");
 
                 Updater.SelfTest();

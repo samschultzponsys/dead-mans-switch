@@ -47,18 +47,22 @@ in Settings. In the tray, the timer keeps counting:
 
 ## Install
 
-From the [latest release](https://github.com/samschultzponsys/dead-mans-switch/releases/latest):
+Download `DeadMansSwitch-Setup-X.Y.exe` from the
+[latest release](https://github.com/samschultzponsys/dead-mans-switch/releases/latest)
+and run it. The first page asks how to set it up:
 
-- **Installer (recommended):** `DeadMansSwitch-Setup-X.Y.exe`. It installs for
-  your Windows account only, so it needs no admin rights, into
-  `%LOCALAPPDATA%\Programs\DeadMansSwitch`. It adds a Start menu entry
-  (desktop shortcut optional) and lists the app in Settings > Apps, where you
-  can uninstall it. Your settings are kept if you uninstall.
-- **Portable:** `DeadMansSwitch-X.Y.exe` runs from anywhere with nothing to
-  install.
+- **Install (recommended):** installs for your Windows account only, so it
+  needs no admin rights, into `%LOCALAPPDATA%\Programs\DeadMansSwitch`. It adds
+  a Start menu entry (desktop shortcut optional) and lists the app in
+  Settings > Apps, where you can uninstall it. Your settings are kept if you
+  uninstall.
+- **Portable:** copies the app into a folder you choose (your desktop by
+  default) and adds nothing to Windows. Its settings are kept in that folder
+  too, so you can move the folder or carry it on a USB stick. To remove it,
+  delete the folder.
 
 It needs .NET Framework 4.8, which is built into Windows 10 (May 2019 update or
-later) and Windows 11. The downloads aren't code-signed yet, so Windows
+later) and Windows 11. The installer isn't code-signed yet, so Windows
 SmartScreen may say it "protected your PC" the first time; choose
 **More info > Run anyway**.
 
@@ -74,32 +78,44 @@ Click the gear in the title bar:
 | Play a sound at the final warning | On | |
 | Keep running in the tray when closed | Asked the first time you close it | |
 | Check for updates when the app opens | On | |
+| Install them automatically | On | |
+| GitHub token | None | Optional |
 
-**Reset to defaults** fills in the default values; click **Save** to keep them.
-**Save** applies the settings right away: a running check restarts with the
-new length, and a final warning already in progress keeps its length.
-Settings are stored in `%APPDATA%\DeadMansSwitch\settings.json` and used every
-time the app opens. Delete that file to go back to the defaults.
+**Reset to defaults** fills in the default values (it leaves a saved token
+alone); click **Save** to keep them. **Save** applies the settings right away:
+a running check restarts with the new length, and a final warning already in
+progress keeps its length. Settings are stored in
+`%APPDATA%\DeadMansSwitch\settings.json` (for a portable copy, `settings.json`
+beside the exe) and used every time the app opens. Delete that file to go back
+to the defaults.
+
+### GitHub token
+
+Update checks work without a token. Add one if the repository is made private,
+or if GitHub starts limiting anonymous update checks (60 an hour per network).
+A [fine-grained token](https://github.com/settings/personal-access-tokens/new)
+with read-only access to this repository's **Contents** is enough. When you
+save, the app checks the token with GitHub and only keeps it if it works. It's
+stored encrypted for your Windows account (DPAPI) and never shown again; type a
+new one to replace it, or use **Remove the saved token**. A portable copy moved
+to another PC or Windows account can't decrypt it, and carries on without it.
 
 ## What's new and updates
 
-Click the version next to the title (for example `v1.2`) to see the changelog.
+Click the version next to the title (for example `v1.5`) to see the changelog.
 It also opens by itself the first time a new version runs.
 
-When the app opens, and every 6 hours while it runs, it asks GitHub for this
-repo's releases. If there's a newer version, a banner offers to update, and its
-notes are shown once in the changelog, so you can see what's new before
-installing it. Clicking **Update** downloads the new version and starts it.
-An installed copy runs the new installer quietly, so Settings > Apps shows
-the new version. For the portable exe, a file
-named with its version (`DeadMansSwitch-1.2.exe`) is replaced by one with the
-new version's name (`DeadMansSwitch-1.3.exe`); a file with any other name is
-updated in place. If GitHub can't be reached, nothing is shown and the timer
-runs as normal.
+When the app opens it asks GitHub for this repo's releases. If there's a newer
+version and **Install them automatically** is on, it updates straight away:
+the installer runs with just a progress window and the app reopens on the new
+version, showing what changed. An installed copy is updated in place (and
+Settings > Apps shows the new version); a portable copy is updated in its own
+folder.
 
-Updating the portable exe needs write access to its folder, so keep it
-somewhere you own (Desktop, Documents, a tools folder) rather than
-`Program Files`. The installer already puts it in such a place.
+While the app is running it checks again every 6 hours, but doesn't interrupt:
+a banner offers the update, and its notes are shown once. With automatic
+installs off, the same happens at launch. If GitHub can't be reached, nothing
+is shown and the timer runs as normal.
 
 ## Versioning
 

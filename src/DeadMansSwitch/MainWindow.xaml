@@ -87,6 +87,26 @@
       </Setter>
     </Style>
 
+    <Style TargetType="PasswordBox">
+      <Setter Property="Foreground" Value="{StaticResource Text}"/>
+      <Setter Property="CaretBrush" Value="{StaticResource Text}"/>
+      <Setter Property="FontSize" Value="14"/>
+      <Setter Property="Padding" Value="8,4"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="PasswordBox">
+            <Border x:Name="Bg" Background="{StaticResource Field}" BorderBrush="{StaticResource FieldBorder}"
+                    BorderThickness="1" CornerRadius="8">
+              <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Bg" Property="BorderBrush" Value="#FF2ECC71"/></Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
     <!-- Segmented choice for the end action. -->
     <Style TargetType="RadioButton">
       <Setter Property="Foreground" Value="{StaticResource Muted}"/>
@@ -288,44 +308,59 @@
             </Grid>
           </StackPanel>
 
-          <StackPanel x:Name="SettingsPanel" Visibility="Hidden">
-            <Grid Margin="0,16,0,2">
+          <DockPanel x:Name="SettingsPanel" Visibility="Hidden">
+            <Grid DockPanel.Dock="Top" Margin="0,16,0,2">
               <TextBlock Text="Settings" Foreground="{StaticResource Text}" FontSize="18" FontWeight="SemiBold"/>
               <Button x:Name="ResetBtn" Style="{StaticResource LinkButton}" FontSize="12" Content="Reset to defaults"
                       HorizontalAlignment="Right"/>
             </Grid>
 
-            <TextBlock Text="Check every" Style="{StaticResource FieldLabel}"/>
-            <StackPanel Orientation="Horizontal">
-              <TextBox x:Name="CheckMinBox" Width="84" TextAlignment="Center"/>
-              <TextBlock Text="minutes" Foreground="{StaticResource Muted}" FontSize="13" VerticalAlignment="Center" Margin="10,0,0,0"/>
+            <StackPanel DockPanel.Dock="Bottom">
+              <TextBlock x:Name="SettingsMsg" Foreground="#FFF08A7E" FontSize="12" TextWrapping="Wrap" Margin="0,8,0,0"/>
+              <Grid Margin="0,8,0,0">
+                <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="10"/><ColumnDefinition/></Grid.ColumnDefinitions>
+                <Button x:Name="BackBtn" Style="{StaticResource GhostButton}" Content="Cancel" Height="40"/>
+                <Button x:Name="SaveBtn" Grid.Column="2" Style="{StaticResource PrimaryButton}" Content="Save" Height="40" FontSize="14"/>
+              </Grid>
             </StackPanel>
 
-            <TextBlock Text="Final warning" Style="{StaticResource FieldLabel}"/>
-            <StackPanel Orientation="Horizontal">
-              <TextBox x:Name="WarnSecBox" Width="84" TextAlignment="Center"/>
-              <TextBlock Text="seconds" Foreground="{StaticResource Muted}" FontSize="13" VerticalAlignment="Center" Margin="10,0,0,0"/>
-            </StackPanel>
+            <!-- Fixed height so the form scrolls instead of making the window taller. -->
+            <ScrollViewer x:Name="SettingsScroll" VerticalScrollBarVisibility="Auto" Height="290">
+              <StackPanel Margin="0,0,12,4">
+                <TextBlock Text="Check every" Style="{StaticResource FieldLabel}"/>
+                <StackPanel Orientation="Horizontal">
+                  <TextBox x:Name="CheckMinBox" Width="84" TextAlignment="Center"/>
+                  <TextBlock Text="minutes" Foreground="{StaticResource Muted}" FontSize="13" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                </StackPanel>
 
-            <TextBlock Text="When time runs out" Style="{StaticResource FieldLabel}"/>
-            <UniformGrid Columns="3" Margin="-2,0">
-              <RadioButton x:Name="ShutdownOpt" GroupName="EndAction" Content="Shut down"/>
-              <RadioButton x:Name="RestartOpt" GroupName="EndAction" Content="Restart"/>
-              <RadioButton x:Name="HibernateOpt" GroupName="EndAction" Content="Hibernate"/>
-            </UniformGrid>
+                <TextBlock Text="Final warning" Style="{StaticResource FieldLabel}"/>
+                <StackPanel Orientation="Horizontal">
+                  <TextBox x:Name="WarnSecBox" Width="84" TextAlignment="Center"/>
+                  <TextBlock Text="seconds" Foreground="{StaticResource Muted}" FontSize="13" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                </StackPanel>
 
-            <CheckBox x:Name="SoundBox" Content="Play a sound at the final warning" Margin="0,18,0,0"/>
-            <CheckBox x:Name="TrayBox" Content="Keep running in the tray when closed" Margin="0,10,0,0"/>
-            <CheckBox x:Name="UpdatesBox" Content="Check for updates when the app opens" Margin="0,10,0,0"/>
+                <TextBlock Text="When time runs out" Style="{StaticResource FieldLabel}"/>
+                <UniformGrid Columns="3" Margin="-2,0">
+                  <RadioButton x:Name="ShutdownOpt" GroupName="EndAction" Content="Shut down"/>
+                  <RadioButton x:Name="RestartOpt" GroupName="EndAction" Content="Restart"/>
+                  <RadioButton x:Name="HibernateOpt" GroupName="EndAction" Content="Hibernate"/>
+                </UniformGrid>
 
-            <TextBlock x:Name="SettingsMsg" Foreground="#FFF08A7E" FontSize="12" TextWrapping="Wrap" Margin="0,12,0,0"/>
+                <CheckBox x:Name="SoundBox" Content="Play a sound at the final warning" Margin="0,18,0,0"/>
+                <CheckBox x:Name="TrayBox" Content="Keep running in the tray when closed" Margin="0,10,0,0"/>
 
-            <Grid Margin="0,12,0,0">
-              <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="10"/><ColumnDefinition/></Grid.ColumnDefinitions>
-              <Button x:Name="BackBtn" Style="{StaticResource GhostButton}" Content="Cancel" Height="40"/>
-              <Button x:Name="SaveBtn" Grid.Column="2" Style="{StaticResource PrimaryButton}" Content="Save" Height="40" FontSize="14"/>
-            </Grid>
-          </StackPanel>
+                <TextBlock Text="Updates" Style="{StaticResource FieldLabel}" Margin="0,20,0,8"/>
+                <CheckBox x:Name="UpdatesBox" Content="Check for updates when the app opens"/>
+                <CheckBox x:Name="AutoInstallBox" Content="Install them automatically" Margin="0,10,0,0"/>
+
+                <TextBlock Text="GitHub token (optional)" Style="{StaticResource FieldLabel}" Margin="0,16,0,6"/>
+                <PasswordBox x:Name="TokenBox"/>
+                <TextBlock x:Name="TokenStatus" Foreground="{StaticResource Muted}" FontSize="11" TextWrapping="Wrap" Margin="0,6,0,0"/>
+                <Button x:Name="RemoveTokenBtn" Style="{StaticResource LinkButton}" Content="Remove the saved token"
+                        HorizontalAlignment="Left" Margin="0,6,0,0"/>
+              </StackPanel>
+            </ScrollViewer>
+          </DockPanel>
 
           <DockPanel x:Name="ChangelogPanel" Visibility="Hidden">
             <TextBlock DockPanel.Dock="Top" Text="What's new" Foreground="{StaticResource Text}" FontSize="18"

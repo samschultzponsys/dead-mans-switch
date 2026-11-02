@@ -81,11 +81,17 @@ namespace DeadMansSwitch
         readonly ScrollViewer changelogScroll;
         readonly TextBox checkMinBox, warnSecBox;
         readonly RadioButton shutdownOpt, restartOpt, hibernateOpt;
-        readonly CheckBox soundBox, trayBox, updatesBox;
+        readonly CheckBox soundBox, trayBox, updatesBox, autoInstallBox;
+        readonly PasswordBox tokenBox;
+        readonly TextBlock tokenStatus;
+        readonly Button saveBtn, removeTokenBtn;
+        readonly ScrollViewer settingsScroll;
+        bool removeTokenOnSave;
 
         public MainView(Settings settings)
         {
             this.settings = settings;
+            Updater.Token = settings.GitHubToken;
             using (var xaml = Resource("MainWindow.xaml"))
                 Window = (Window)XamlReader.Load(xaml);
 
@@ -126,6 +132,12 @@ namespace DeadMansSwitch
             soundBox = Find<CheckBox>("SoundBox");
             trayBox = Find<CheckBox>("TrayBox");
             updatesBox = Find<CheckBox>("UpdatesBox");
+            autoInstallBox = Find<CheckBox>("AutoInstallBox");
+            tokenBox = Find<PasswordBox>("TokenBox");
+            tokenStatus = Find<TextBlock>("TokenStatus");
+            saveBtn = Find<Button>("SaveBtn");
+            removeTokenBtn = Find<Button>("RemoveTokenBtn");
+            settingsScroll = Find<ScrollViewer>("SettingsScroll");
 
             root.Background = background;
             versionBtn.Content = "v" + Updater.Current;
@@ -144,7 +156,13 @@ namespace DeadMansSwitch
             Find<Button>("ConfirmNoBtn").Click += (s, e) => ShowPanel(mainPanel);
             Find<Button>("SettingsBtn").Click += (s, e) => ToggleSettings();
             Find<Button>("BackBtn").Click += (s, e) => ShowPanel(mainPanel);
-            Find<Button>("SaveBtn").Click += (s, e) => SaveSettings();
+            saveBtn.Click += async (s, e) => await SaveSettings();
+            removeTokenBtn.Click += (s, e) =>
+            {
+                removeTokenOnSave = true;
+                tokenBox.Clear();
+                ShowTokenState();
+            };
             Find<Button>("ResetBtn").Click += (s, e) =>
             {
                 FillSettingsForm(new Settings());
@@ -212,7 +230,7 @@ namespace DeadMansSwitch
                 }
                 if (settings.CheckForUpdates == true)
                 {
-                    await CheckForUpdate();
+                    await CheckForUpdate(atLaunch: true);
                     updateTimer.Start();
                 }
             };
@@ -588,8 +606,25 @@ namespace DeadMansSwitch
             if (phase == Phase.Warn) return;   // the warning keeps the "I'm here" button on screen
             if (settingsPanel.Visibility == Visibility.Visible) { ShowPanel(mainPanel); return; }
             FillSettingsForm(settings);
+            removeTokenOnSave = false;
+            tokenBox.Clear();
+            ShowTokenState();
             settingsMsg.Text = "";
+            settingsScroll.ScrollToTop();
             ShowPanel(settingsPanel);
+        }
+
+        /// <summary>The token itself is never shown; the box is for typing a new one.</summary>
+        void ShowTokenState()
+        {
+            bool saved = settings.GitHubToken != null && !removeTokenOnSave;
+            tokenStatus.Text = saved
+                ? "A token is saved. Type a new one to replace it."
+                : removeTokenOnSave
+                    ? "The saved token will be removed when you save."
+                    : "Only needed if the repository is private, or GitHub starts limiting update checks. "
+                      + "It's checked with GitHub when you save, and stored encrypted for your Windows account.";
+            removeTokenBtn.Visibility = saved ? Visibility.Visible : Visibility.Collapsed;
         }
 
         void FillSettingsForm(Settings from)
@@ -602,6 +637,7 @@ namespace DeadMansSwitch
             soundBox.IsChecked = from.PlaySound;
             trayBox.IsChecked = from.CloseToTray == true;
             updatesBox.IsChecked = from.CheckForUpdates;
+            autoInstallBox.IsChecked = from.AutoInstallUpdates;
         }
 
         void SetSettingsMessage(string text, bool error)
@@ -610,7 +646,7 @@ namespace DeadMansSwitch
             settingsMsg.Text = text;
         }
 
-        void SaveSettings()
+        async Task SaveSettings()
         {
             if (!int.TryParse(checkMinBox.Text.Trim(), out int minutes) || !Settings.ValidCheckMinutes(minutes))
             {
@@ -623,6 +659,17 @@ namespace DeadMansSwitch
                 return;
             }
 
+            // A new token is only kept if GitHub accepts it.
+            string newToken = tokenBox.Password.Trim();
+            if (newToken.Length > 0)
+            {
+                SetSettingsMessage("Checking the token with GitHub...", error: false);
+                saveBtn.IsEnabled = false;
+                string problem = await Updater.TestTokenAsync(newToken);
+                saveBtn.IsEnabled = true;
+                if (problem != null) { SetSettingsMessage(problem, error: true); return; }
+            }
+
             settings.CheckMinutes = minutes;
             settings.WarnSeconds = seconds;
             settings.EndAction = restartOpt.IsChecked == true ? EndAction.Restart
@@ -631,6 +678,9 @@ namespace DeadMansSwitch
             settings.PlaySound = soundBox.IsChecked == true;
             settings.CloseToTray = trayBox.IsChecked == true;
             settings.CheckForUpdates = updatesBox.IsChecked == true;
+            settings.AutoInstallUpdates = autoInstallBox.IsChecked == true;
+            if (newToken.Length > 0) settings.GitHubToken = newToken;
+            else if (removeTokenOnSave) settings.GitHubToken = null;
 
             try { settings.Save(); }
             catch (Exception ex)
@@ -639,6 +689,7 @@ namespace DeadMansSwitch
                 return;
             }
 
+            Updater.Token = settings.GitHubToken;
             if (settings.CloseToTray == true) EnsureTray();
             else RemoveTray();
             if (settings.CheckForUpdates == true) updateTimer.Start();
@@ -678,12 +729,21 @@ namespace DeadMansSwitch
             ShowChangelog();
         }
 
-        async Task CheckForUpdate()
+        /// <summary>
+        /// Looks for a newer release. At launch (with automatic installs on) it's
+        /// installed straight away; otherwise it's offered with a banner and its notes.
+        /// </summary>
+        async Task CheckForUpdate(bool atLaunch = false)
         {
             var found = await Updater.CheckAsync();
             if (found == null) return;
             bool isNew = update?.Version != found.Version;
             update = found;
+            if (atLaunch && settings.AutoInstallUpdates == true && phase == Phase.Check)
+            {
+                await InstallUpdate();
+                return;
+            }
             updateText.Text = $"Version {update.Version} is available.";
             updateBanner.Visibility = Visibility.Visible;
             if (changelogPanel.Visibility == Visibility.Visible) ShowChangelog();   // add the new notes to what's showing
@@ -696,7 +756,8 @@ namespace DeadMansSwitch
         {
             if (update == null) return;
             updateBtn.IsEnabled = changelogUpdateBtn.IsEnabled = false;
-            updateText.Text = $"Downloading {update.Version}...";
+            updateText.Text = $"Updating to {update.Version}...";
+            updateBanner.Visibility = Visibility.Visible;
             try
             {
                 await Updater.InstallAsync(update);
@@ -756,6 +817,8 @@ namespace DeadMansSwitch
             TogglePause();
             ToggleSettings();
             Shot("settings", phaseSeconds * 0.62);
+            settingsScroll.ScrollToEnd();
+            Shot("settings-updates", phaseSeconds * 0.62);
             ShowChangelog();
             Shot("changelog", phaseSeconds * 0.62);
             ShowPanel(askTrayPanel);

@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Reflection;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Json;
@@ -24,30 +25,31 @@ namespace DeadMansSwitch
     public sealed class UpdateInfo
     {
         public string Version { get; set; }
-        public string DownloadUrl { get; set; }
 
-        /// <summary>The release's installer, used to update installed copies; null if it has none.</summary>
+        /// <summary>The release's installer: the public download link, and the API link used with a token.</summary>
         public string SetupUrl { get; set; }
+        public string SetupApiUrl { get; set; }
 
         /// <summary>Notes of every release newer than this build, newest first.</summary>
         public List<ReleaseNotes> Notes { get; set; } = new List<ReleaseNotes>();
     }
 
     /// <summary>
-    /// Finds newer releases on GitHub and replaces the running exe with the new one.
+    /// Finds newer releases on GitHub and installs them by running the release's
+    /// installer silently, set to update this copy whether it was installed or
+    /// set up as portable.
     /// </summary>
     public static class Updater
     {
         const string Repo = "samschultzponsys/dead-mans-switch";
-
-        // Releases ship DeadMansSwitch-X.Y.exe, plus a plain DeadMansSwitch.exe
-        // for 1.1, whose updater only knows that name.
-        static readonly Regex VersionedName = new Regex(@"^DeadMansSwitch-(\d+\.\d+)\.exe$", RegexOptions.IgnoreCase);
+        const string ExeName = "DeadMansSwitch.exe";
         static readonly Regex SetupName = new Regex(@"^DeadMansSwitch-Setup-(\d+\.\d+)\.exe$", RegexOptions.IgnoreCase);
-        const string PlainName = "DeadMansSwitch.exe";
 
         // Must match AppId in installer/DeadMansSwitch.iss; Inno Setup adds "_is1".
         const string UninstallKey = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\{8F3C2A51-6B1E-4D7A-9C2E-5A1F0B7D3E44}_is1";
+
+        /// <summary>Optional GitHub token (from Settings); needed if the repository is private.</summary>
+        public static string Token { get; set; }
 
         [DataContract]
         sealed class Release
@@ -63,7 +65,8 @@ namespace DeadMansSwitch
         sealed class Asset
         {
             [DataMember(Name = "name")] public string Name { get; set; }
-            [DataMember(Name = "browser_download_url")] public string Url { get; set; }
+            [DataMember(Name = "browser_download_url")] public string DownloadUrl { get; set; }
+            [DataMember(Name = "url")] public string ApiUrl { get; set; }
         }
 
         /// <summary>MAJOR.MINOR of this build, taken from the VERSION file at build time.</summary>
@@ -78,7 +81,7 @@ namespace DeadMansSwitch
 
         static string ExePath => Process.GetCurrentProcess().MainModule.FileName;
 
-        /// <summary>True when this exe is the one the installer put in place (not a portable copy).</summary>
+        /// <summary>True when this exe is the one the installer installed (not a portable copy).</summary>
         public static bool IsInstalled
         {
             get
@@ -95,17 +98,16 @@ namespace DeadMansSwitch
             }
         }
 
-        /// <summary>True for file names like DeadMansSwitch-1.2.exe.</summary>
-        public static bool IsVersionedName(string path) => VersionedName.IsMatch(Path.GetFileName(path));
-
         static Version ParseTag(string tag) =>
             Version.TryParse(tag?.TrimStart('v', 'V'), out var v) ? new Version(v.Major, v.Minor) : null;
 
-        static HttpClient CreateClient(TimeSpan timeout)
+        static HttpClient CreateClient(TimeSpan timeout, string token, bool followRedirects = true)
         {
             ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
-            var http = new HttpClient { Timeout = timeout };
+            var http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = followRedirects }) { Timeout = timeout };
             http.DefaultRequestHeaders.UserAgent.ParseAdd($"DeadMansSwitch/{Current}");
+            if (!string.IsNullOrEmpty(token))
+                http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
             return http;
         }
 
@@ -114,7 +116,7 @@ namespace DeadMansSwitch
         {
             try
             {
-                using var http = CreateClient(TimeSpan.FromSeconds(10));
+                using var http = CreateClient(TimeSpan.FromSeconds(10), Token);
                 using var json = await http.GetStreamAsync($"https://api.github.com/repos/{Repo}/releases?per_page=30");
                 var releases = (Release[])new DataContractJsonSerializer(typeof(Release[])).ReadObject(json);
                 return FindUpdate(releases, Current);
@@ -136,138 +138,150 @@ namespace DeadMansSwitch
             if (newer.Count == 0) return null;
 
             var latest = newer[0];
-            var assets = latest.Release.Assets ?? new Asset[0];
-            var asset = assets.FirstOrDefault(a => VersionedName.IsMatch(a.Name ?? ""))
-                     ?? assets.FirstOrDefault(a => string.Equals(a.Name, PlainName, StringComparison.OrdinalIgnoreCase));
-            if (asset == null) return null;
+            var setup = latest.Release.Assets?.FirstOrDefault(a => SetupName.IsMatch(a.Name ?? ""));
+            if (setup == null) return null;
 
             return new UpdateInfo
             {
                 Version = latest.Version.ToString(),
-                DownloadUrl = asset.Url,
-                SetupUrl = assets.FirstOrDefault(a => SetupName.IsMatch(a.Name ?? ""))?.Url,
+                SetupUrl = setup.DownloadUrl,
+                SetupApiUrl = setup.ApiUrl,
                 Notes = newer.Select(x => new ReleaseNotes { Version = x.Version.ToString(), Body = x.Release.Body ?? "" }).ToList(),
             };
         }
 
-        /// <summary>
-        /// Downloads the update and starts it; the caller should exit afterwards.
-        /// A versioned exe (DeadMansSwitch-1.1.exe) is replaced by a new file
-        /// with the new version in its name, which deletes the old file once
-        /// this process has exited. Any other name is kept: Windows won't
-        /// overwrite a running exe but will rename it, so the current one
-        /// becomes .old and is deleted by the new copy on its first start.
-        /// </summary>
-        public static async Task InstallAsync(UpdateInfo update)
+        /// <summary>Checks a token against the repository; returns null if it works, or what's wrong.</summary>
+        public static async Task<string> TestTokenAsync(string token)
         {
-            string self = ExePath, dir = Path.GetDirectoryName(self);
-
-            // Installed copies run the new installer silently, so Settings > Apps shows the
-            // right version. It closes this app if needed and starts the new one (/RELAUNCH).
-            if (IsInstalled && update.SetupUrl != null)
-            {
-                byte[] setup = await DownloadProgram(update.SetupUrl);
-                string setupPath = Path.Combine(Path.GetTempPath(), $"DeadMansSwitch-Setup-{update.Version}.exe");
-                File.WriteAllBytes(setupPath, setup);
-                Process.Start(setupPath, "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS /RELAUNCH");
-                return;
-            }
-
-            byte[] bytes = await DownloadProgram(update.DownloadUrl);
-
             try
             {
-                if (IsVersionedName(self))
+                using var http = CreateClient(TimeSpan.FromSeconds(10), token);
+                using var response = await http.GetAsync($"https://api.github.com/repos/{Repo}");
+                if (response.IsSuccessStatusCode) return null;
+                return response.StatusCode switch
                 {
-                    string target = Path.Combine(dir, $"DeadMansSwitch-{update.Version}.exe");
-                    File.WriteAllBytes(target, bytes);
-                    Process.Start(target, $"--replaces \"{self}\"");
-                    return;
-                }
-
-                string incoming = self + ".new", old = self + ".old";
-                try
-                {
-                    File.WriteAllBytes(incoming, bytes);
-                    if (File.Exists(old)) File.Delete(old);
-                    File.Move(self, old);
-                    try { File.Move(incoming, self); }
-                    catch { File.Move(old, self); throw; }
-                }
-                finally
-                {
-                    if (File.Exists(incoming)) File.Delete(incoming);
-                }
-                Process.Start(self, "--updated");
+                    HttpStatusCode.Unauthorized => "GitHub didn't accept that token. Check it was copied in full and hasn't expired.",
+                    HttpStatusCode.NotFound => $"That token can't see {Repo}. Give it read access to the repository's contents.",
+                    _ => $"GitHub answered {(int)response.StatusCode} {response.ReasonPhrase}.",
+                };
             }
-            catch (UnauthorizedAccessException)
+            catch (Exception ex)
             {
-                throw new UnauthorizedAccessException(
-                    $"No permission to write to {dir}. Move the app to a folder you own, or update it by hand.");
+                return "Couldn't reach GitHub to check the token: " + ex.Message;
             }
         }
 
-        static async Task<byte[]> DownloadProgram(string url)
+        /// <summary>
+        /// Downloads the update's installer and starts it silently; the caller
+        /// should exit right away. The installer closes this app if it's still
+        /// running, replaces the exe and reopens it.
+        /// </summary>
+        public static async Task InstallAsync(UpdateInfo update)
+        {
+            byte[] setup = await DownloadSetup(update);
+            string setupPath = Path.Combine(Path.GetTempPath(), $"DeadMansSwitch-Setup-{update.Version}.exe");
+            File.WriteAllBytes(setupPath, setup);
+            Process.Start(setupPath, SetupArguments(IsInstalled, ExePath));
+        }
+
+        /// <summary>
+        /// Arguments for a silent update. /SILENT shows only a progress window.
+        /// A portable copy is updated in its own folder, and an exe with another
+        /// name (an older download like DeadMansSwitch-1.3.exe) is replaced by
+        /// DeadMansSwitch.exe and then removed.
+        /// </summary>
+        static string SetupArguments(bool installed, string exePath)
+        {
+            var args = "/SILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS /RELAUNCH";
+            if (installed) return args;
+            args += $" /PORTABLE \"/DIR={Path.GetDirectoryName(exePath)}\"";
+            if (!string.Equals(Path.GetFileName(exePath), ExeName, StringComparison.OrdinalIgnoreCase))
+                args += $" \"/REPLACES={exePath}\"";
+            return args;
+        }
+
+        static async Task<byte[]> DownloadSetup(UpdateInfo update)
         {
             byte[] bytes;
-            using (var http = CreateClient(TimeSpan.FromMinutes(2)))
-                bytes = await http.GetByteArrayAsync(url);
+            if (string.IsNullOrEmpty(Token) || string.IsNullOrEmpty(update.SetupApiUrl))
+            {
+                using var http = CreateClient(TimeSpan.FromMinutes(5), token: null);
+                bytes = await http.GetByteArrayAsync(update.SetupUrl);
+            }
+            else
+            {
+                // With a token, ask the API for the file. It answers with a redirect to
+                // storage that must be followed without the token, which that host rejects.
+                using var api = CreateClient(TimeSpan.FromMinutes(5), Token, followRedirects: false);
+                var request = new HttpRequestMessage(HttpMethod.Get, update.SetupApiUrl);
+                request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/octet-stream"));
+                using var response = await api.SendAsync(request);
+                if ((int)response.StatusCode >= 300 && (int)response.StatusCode < 400 && response.Headers.Location != null)
+                {
+                    using var storage = CreateClient(TimeSpan.FromMinutes(5), token: null);
+                    bytes = await storage.GetByteArrayAsync(response.Headers.Location);
+                }
+                else
+                {
+                    response.EnsureSuccessStatusCode();
+                    bytes = await response.Content.ReadAsByteArrayAsync();
+                }
+            }
             if (bytes.Length < 4096 || bytes[0] != 'M' || bytes[1] != 'Z')
                 throw new InvalidDataException("The download is not a Windows program.");
             return bytes;
         }
 
-        /// <summary>True when this process was started by an update and the old copy may still be exiting.</summary>
-        public static bool StartedByUpdate(string[] args) => args.Contains("--replaces") || args.Contains("--updated");
+        /// <summary>True when the installer started this copy after an update; the old one may still be exiting.</summary>
+        public static bool StartedByUpdate(string[] args) => args.Contains("--updated") || args.Contains("--replaces");
 
-        /// <summary>Deletes what an update left behind, retrying while the old process exits.</summary>
+        /// <summary>Deletes an old exe an update replaced (--replaces), retrying while its process exits.</summary>
         public static void CleanUpAfterUpdate(string[] args)
         {
-            var leftovers = new List<string> { ExePath + ".old" };
             int i = Array.IndexOf(args, "--replaces");
-            if (i >= 0 && i + 1 < args.Length) leftovers.Add(args[i + 1]);
+            if (i < 0 || i + 1 >= args.Length) return;
+            string old = Path.GetFullPath(args[i + 1]);
 
-            string dir = Path.GetDirectoryName(ExePath);
-            leftovers = leftovers.Where(path =>
-                    File.Exists(path)
-                    && !string.Equals(Path.GetFullPath(path), ExePath, StringComparison.OrdinalIgnoreCase)
-                    // only ever delete an old copy of this app, next to this exe
-                    && string.Equals(Path.GetDirectoryName(Path.GetFullPath(path)), dir, StringComparison.OrdinalIgnoreCase)
-                    && Path.GetFileName(path).StartsWith("DeadMansSwitch", StringComparison.OrdinalIgnoreCase))
-                .ToList();
-            if (leftovers.Count == 0) return;
+            // Only ever delete an old copy of this app, next to this exe.
+            if (!File.Exists(old)
+                || string.Equals(old, ExePath, StringComparison.OrdinalIgnoreCase)
+                || !string.Equals(Path.GetDirectoryName(old), Path.GetDirectoryName(ExePath), StringComparison.OrdinalIgnoreCase)
+                || !Path.GetFileName(old).StartsWith("DeadMansSwitch", StringComparison.OrdinalIgnoreCase)
+                || !old.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+                return;
 
             ThreadPool.QueueUserWorkItem(_ =>
             {
-                foreach (var path in leftovers)
-                    for (int attempt = 0; attempt < 30 && File.Exists(path); attempt++)
-                    {
-                        try { File.Delete(path); }
-                        catch (Exception) { Thread.Sleep(500); }
-                    }
+                for (int attempt = 0; attempt < 30 && File.Exists(old); attempt++)
+                {
+                    try { File.Delete(old); }
+                    catch (Exception) { Thread.Sleep(500); }
+                }
             });
         }
 
-        /// <summary>Checks release selection against a canned GitHub response (used by --selftest).</summary>
+        /// <summary>Checks release selection and installer arguments (used by --selftest).</summary>
         internal static void SelfTest()
         {
             var releases = new[]
             {
-                new Release { TagName = "v1.3", Body = "three", Assets = new[] { new Asset { Name = "DeadMansSwitch.exe", Url = "plain" },
-                                                                                 new Asset { Name = "DeadMansSwitch-Setup-1.3.exe", Url = "setup" },
-                                                                                 new Asset { Name = "DeadMansSwitch-1.3.exe", Url = "versioned" } } },
+                new Release { TagName = "v1.3", Body = "three", Assets = new[] { new Asset { Name = "DeadMansSwitch-Setup-1.3.exe", DownloadUrl = "setup", ApiUrl = "api" } } },
                 new Release { TagName = "v1.4", Body = "draft", Draft = true, Assets = new Asset[0] },
-                new Release { TagName = "v1.2", Body = "two", Assets = new[] { new Asset { Name = "DeadMansSwitch.exe", Url = "old" } } },
+                new Release { TagName = "v1.2", Body = "two", Assets = new Asset[0] },
                 new Release { TagName = "v1.1", Body = "one", Assets = new Asset[0] },
             };
             var u = FindUpdate(releases, new Version(1, 1));
-            if (u == null || u.Version != "1.3" || u.DownloadUrl != "versioned" || u.SetupUrl != "setup"
+            if (u == null || u.Version != "1.3" || u.SetupUrl != "setup" || u.SetupApiUrl != "api"
                 || string.Join(",", u.Notes.Select(n => n.Version)) != "1.3,1.2")
                 throw new Exception("Update selection picked the wrong release or notes.");
             if (FindUpdate(releases, new Version(1, 3)) != null)
                 throw new Exception("Update offered when already on the latest version.");
-            if (!IsVersionedName(@"C:\x\DeadMansSwitch-1.2.exe") || IsVersionedName(@"C:\x\DeadMansSwitch.exe"))
-                throw new Exception("Versioned file name detection is wrong.");
+
+            const string installedArgs = "/SILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS /RELAUNCH";
+            if (SetupArguments(true, @"C:\Apps\DeadMansSwitch.exe") != installedArgs
+                || SetupArguments(false, @"C:\Tools\DMS\DeadMansSwitch.exe") != installedArgs + " /PORTABLE \"/DIR=C:\\Tools\\DMS\""
+                || SetupArguments(false, @"C:\Tools\DeadMansSwitch-1.3.exe") != installedArgs + " /PORTABLE \"/DIR=C:\\Tools\" \"/REPLACES=C:\\Tools\\DeadMansSwitch-1.3.exe\"")
+                throw new Exception("Installer arguments for an update are wrong.");
         }
     }
 }
