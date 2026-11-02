@@ -11,6 +11,7 @@ using System.Runtime.Serialization.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Win32;
 
 namespace DeadMansSwitch
 {
@@ -24,6 +25,9 @@ namespace DeadMansSwitch
     {
         public string Version { get; set; }
         public string DownloadUrl { get; set; }
+
+        /// <summary>The release's installer, used to update installed copies; null if it has none.</summary>
+        public string SetupUrl { get; set; }
 
         /// <summary>Notes of every release newer than this build, newest first.</summary>
         public List<ReleaseNotes> Notes { get; set; } = new List<ReleaseNotes>();
@@ -39,7 +43,11 @@ namespace DeadMansSwitch
         // Releases ship DeadMansSwitch-X.Y.exe, plus a plain DeadMansSwitch.exe
         // for 1.1, whose updater only knows that name.
         static readonly Regex VersionedName = new Regex(@"^DeadMansSwitch-(\d+\.\d+)\.exe$", RegexOptions.IgnoreCase);
+        static readonly Regex SetupName = new Regex(@"^DeadMansSwitch-Setup-(\d+\.\d+)\.exe$", RegexOptions.IgnoreCase);
         const string PlainName = "DeadMansSwitch.exe";
+
+        // Must match AppId in installer/DeadMansSwitch.iss; Inno Setup adds "_is1".
+        const string UninstallKey = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\{8F3C2A51-6B1E-4D7A-9C2E-5A1F0B7D3E44}_is1";
 
         [DataContract]
         sealed class Release
@@ -69,6 +77,23 @@ namespace DeadMansSwitch
         }
 
         static string ExePath => Process.GetCurrentProcess().MainModule.FileName;
+
+        /// <summary>True when this exe is the one the installer put in place (not a portable copy).</summary>
+        public static bool IsInstalled
+        {
+            get
+            {
+                try
+                {
+                    using var key = Registry.CurrentUser.OpenSubKey(UninstallKey);
+                    var location = key?.GetValue("InstallLocation") as string;
+                    return !string.IsNullOrEmpty(location) && string.Equals(
+                        Path.GetFullPath(location).TrimEnd('\\'), Path.GetDirectoryName(ExePath).TrimEnd('\\'),
+                        StringComparison.OrdinalIgnoreCase);
+                }
+                catch (Exception) { return false; }
+            }
+        }
 
         /// <summary>True for file names like DeadMansSwitch-1.2.exe.</summary>
         public static bool IsVersionedName(string path) => VersionedName.IsMatch(Path.GetFileName(path));
@@ -120,6 +145,7 @@ namespace DeadMansSwitch
             {
                 Version = latest.Version.ToString(),
                 DownloadUrl = asset.Url,
+                SetupUrl = assets.FirstOrDefault(a => SetupName.IsMatch(a.Name ?? ""))?.Url,
                 Notes = newer.Select(x => new ReleaseNotes { Version = x.Version.ToString(), Body = x.Release.Body ?? "" }).ToList(),
             };
         }
@@ -136,11 +162,18 @@ namespace DeadMansSwitch
         {
             string self = ExePath, dir = Path.GetDirectoryName(self);
 
-            byte[] bytes;
-            using (var http = CreateClient(TimeSpan.FromMinutes(2)))
-                bytes = await http.GetByteArrayAsync(update.DownloadUrl);
-            if (bytes.Length < 4096 || bytes[0] != 'M' || bytes[1] != 'Z')
-                throw new InvalidDataException("The download is not a Windows program.");
+            // Installed copies run the new installer silently, so Settings > Apps shows the
+            // right version. It closes this app if needed and starts the new one (/RELAUNCH).
+            if (IsInstalled && update.SetupUrl != null)
+            {
+                byte[] setup = await DownloadProgram(update.SetupUrl);
+                string setupPath = Path.Combine(Path.GetTempPath(), $"DeadMansSwitch-Setup-{update.Version}.exe");
+                File.WriteAllBytes(setupPath, setup);
+                Process.Start(setupPath, "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS /RELAUNCH");
+                return;
+            }
+
+            byte[] bytes = await DownloadProgram(update.DownloadUrl);
 
             try
             {
@@ -172,6 +205,16 @@ namespace DeadMansSwitch
                 throw new UnauthorizedAccessException(
                     $"No permission to write to {dir}. Move the app to a folder you own, or update it by hand.");
             }
+        }
+
+        static async Task<byte[]> DownloadProgram(string url)
+        {
+            byte[] bytes;
+            using (var http = CreateClient(TimeSpan.FromMinutes(2)))
+                bytes = await http.GetByteArrayAsync(url);
+            if (bytes.Length < 4096 || bytes[0] != 'M' || bytes[1] != 'Z')
+                throw new InvalidDataException("The download is not a Windows program.");
+            return bytes;
         }
 
         /// <summary>True when this process was started by an update and the old copy may still be exiting.</summary>
@@ -211,13 +254,14 @@ namespace DeadMansSwitch
             var releases = new[]
             {
                 new Release { TagName = "v1.3", Body = "three", Assets = new[] { new Asset { Name = "DeadMansSwitch.exe", Url = "plain" },
+                                                                                 new Asset { Name = "DeadMansSwitch-Setup-1.3.exe", Url = "setup" },
                                                                                  new Asset { Name = "DeadMansSwitch-1.3.exe", Url = "versioned" } } },
                 new Release { TagName = "v1.4", Body = "draft", Draft = true, Assets = new Asset[0] },
                 new Release { TagName = "v1.2", Body = "two", Assets = new[] { new Asset { Name = "DeadMansSwitch.exe", Url = "old" } } },
                 new Release { TagName = "v1.1", Body = "one", Assets = new Asset[0] },
             };
             var u = FindUpdate(releases, new Version(1, 1));
-            if (u == null || u.Version != "1.3" || u.DownloadUrl != "versioned"
+            if (u == null || u.Version != "1.3" || u.DownloadUrl != "versioned" || u.SetupUrl != "setup"
                 || string.Join(",", u.Notes.Select(n => n.Version)) != "1.3,1.2")
                 throw new Exception("Update selection picked the wrong release or notes.");
             if (FindUpdate(releases, new Version(1, 3)) != null)

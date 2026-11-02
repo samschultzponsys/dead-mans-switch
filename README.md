@@ -11,6 +11,8 @@ a game server) without it staying on all night if you fall asleep or walk away.
   <img src="https://raw.githubusercontent.com/samschultzponsys/dead-mans-switch/screenshots/changelog.png" width="260" alt="What's new">
   <img src="https://raw.githubusercontent.com/samschultzponsys/dead-mans-switch/screenshots/paused.png" width="260" alt="Paused">
   <img src="https://raw.githubusercontent.com/samschultzponsys/dead-mans-switch/screenshots/tray-question.png" width="260" alt="Close to tray question">
+  <img src="https://raw.githubusercontent.com/samschultzponsys/dead-mans-switch/screenshots/confirm-pause.png" width="260" alt="Pause confirmation">
+  <img src="https://raw.githubusercontent.com/samschultzponsys/dead-mans-switch/screenshots/confirm-quit.png" width="260" alt="Stop confirmation">
 </p>
 
 ## How it works
@@ -18,7 +20,8 @@ a game server) without it staying on all night if you fall asleep or walk away.
 1. A window stays on top with a green ring counting down to the next check
    (5 minutes unless you change it).
 2. Clicking **I'm here** refills the ring and starts the countdown again.
-   **Pause** freezes it until you click **Resume**.
+   **Pause** freezes it until you click **Resume**. Pause and **Stop & quit**
+   ask you to confirm first.
 3. If the ring runs out, the window turns red and the **final warning** starts
    (60 seconds unless you change it). It plays a sound and pulls itself to the
    front every 2 seconds, even if minimized or in the tray. Press **Space**
@@ -28,7 +31,7 @@ a game server) without it staying on all night if you fall asleep or walk away.
    hibernates, depending on the setting. Shutdown and restart force open apps
    to close.
 
-**Stop timer and quit** closes the app without doing anything. Only one copy
+**Stop & quit** closes the app without doing anything. Only one copy
 runs at a time; starting it again brings up the one already running.
 
 ## Tray icon
@@ -38,15 +41,26 @@ in the system tray or quit, and remembers the answer. You can change it later
 in Settings. In the tray, the timer keeps counting:
 
 - Click the icon to open the window.
-- Right-click for **I'm here**, **Pause**/**Resume** and **Stop timer and quit**.
+- Right-click for **I'm here**, **Pause**/**Resume** and **Stop timer and quit**
+  (Pause and quitting ask to confirm in the window).
 - Hover over it to see the time left.
 
-## Download and run
+## Install
 
-Get `DeadMansSwitch-X.Y.exe` (for example `DeadMansSwitch-1.2.exe`) from the
-[latest release](https://github.com/samschultzponsys/dead-mans-switch/releases/latest)
-and run it. There's nothing to install. It needs .NET Framework 4.8, which is
-built into Windows 10 (May 2019 update or later) and Windows 11.
+From the [latest release](https://github.com/samschultzponsys/dead-mans-switch/releases/latest):
+
+- **Installer (recommended):** `DeadMansSwitch-Setup-X.Y.exe`. It installs for
+  your Windows account only, so it needs no admin rights, into
+  `%LOCALAPPDATA%\Programs\DeadMansSwitch`. It adds a Start menu entry
+  (desktop shortcut optional) and lists the app in Settings > Apps, where you
+  can uninstall it. Your settings are kept if you uninstall.
+- **Portable:** `DeadMansSwitch-X.Y.exe` runs from anywhere with nothing to
+  install.
+
+It needs .NET Framework 4.8, which is built into Windows 10 (May 2019 update or
+later) and Windows 11. The downloads aren't code-signed yet, so Windows
+SmartScreen may say it "protected your PC" the first time; choose
+**More info > Run anyway**.
 
 ## Settings
 
@@ -75,14 +89,17 @@ It also opens by itself the first time a new version runs.
 When the app opens, and every 6 hours while it runs, it asks GitHub for this
 repo's releases. If there's a newer version, a banner offers to update, and its
 notes are shown once in the changelog, so you can see what's new before
-installing it. Clicking **Update** downloads the new exe and starts it. A file
+installing it. Clicking **Update** downloads the new version and starts it.
+An installed copy runs the new installer quietly, so Settings > Apps shows
+the new version. For the portable exe, a file
 named with its version (`DeadMansSwitch-1.2.exe`) is replaced by one with the
 new version's name (`DeadMansSwitch-1.3.exe`); a file with any other name is
 updated in place. If GitHub can't be reached, nothing is shown and the timer
 runs as normal.
 
-Updating needs write access to the folder the exe is in, so keep it somewhere
-you own (Desktop, Documents, a tools folder) rather than `Program Files`.
+Updating the portable exe needs write access to its folder, so keep it
+somewhere you own (Desktop, Documents, a tools folder) rather than
+`Program Files`. The installer already puts it in such a place.
 
 ## Versioning
 
@@ -142,6 +159,7 @@ src/DeadMansSwitch/
   Updater.cs                  GitHub release check and exe swap
   Program.cs                  entry point, single instance, --selftest
 assets/DeadMansSwitch.ico     app icon (tools/make_icon.py redraws it)
+installer/DeadMansSwitch.iss  Inno Setup installer script
 tools/Bump-Version.ps1        version bump + changelog
 .github/workflows/build.yml   Windows build, self-test and releases
 VERSION                       current version

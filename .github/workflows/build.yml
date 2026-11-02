@@ -41,6 +41,44 @@ jobs:
           Get-Content out.txt, err.txt
           if ($p.ExitCode -ne 0) { throw "Self-test failed with exit code $($p.ExitCode)" }
 
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress | Out-Null }
+          if (-not (Test-Path $iscc)) { throw "Inno Setup not found at $iscc" }
+          $version = (Get-Content VERSION -Raw).Trim()
+          & $iscc /Q "/DAppVersion=$version" installer\DeadMansSwitch.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      # Installs, runs and uninstalls the real installer, as a user would.
+      - name: Test installer
+        shell: pwsh
+        run: |
+          $version = (Get-Content VERSION -Raw).Trim()
+          $dir = Join-Path $env:RUNNER_TEMP 'dms-install'
+          $key = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{8F3C2A51-6B1E-4D7A-9C2E-5A1F0B7D3E44}_is1'
+          $exe = Join-Path $dir 'DeadMansSwitch.exe'
+
+          $p = Start-Process "dist\DeadMansSwitch-Setup-$version.exe" -Wait -PassThru `
+                 -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=$dir"
+          if ($p.ExitCode -ne 0) { throw "Installer exited with code $($p.ExitCode)" }
+          if (-not (Test-Path $exe)) { throw "Installer did not create $exe" }
+          $shown = (Get-ItemProperty $key).DisplayVersion
+          if ($shown -ne $version) { throw "Apps list shows version '$shown', expected $version" }
+
+          $p = Start-Process $exe -ArgumentList '--selftest', '--expect-installed' -Wait -PassThru `
+                 -RedirectStandardOutput inst-out.txt -RedirectStandardError inst-err.txt
+          Get-Content inst-out.txt, inst-err.txt
+          if ($p.ExitCode -ne 0) { throw "The installed app failed its self-test" }
+
+          # The uninstaller hands off to a copy of itself and returns at once, so wait for the result.
+          Start-Process (Join-Path $dir 'unins000.exe') -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -Wait
+          for ($i = 0; $i -lt 30 -and ((Test-Path $exe) -or (Test-Path $key)); $i++) { Start-Sleep -Seconds 1 }
+          if (Test-Path $exe) { throw "Uninstall left $exe behind" }
+          if (Test-Path $key) { throw "Uninstall left the Apps list entry behind" }
+          Write-Host "Installer test passed (v$version)."
+
       - uses: actions/upload-artifact@v5
         with:
           name: DeadMansSwitch
@@ -94,5 +132,6 @@ jobs:
           Set-Content -Path release-notes.md -Value $Matches[1].Trim()
 
           # DeadMansSwitch.exe is the name 1.1's updater looks for.
-          gh release create "v$version" "dist/DeadMansSwitch-$version.exe" dist/DeadMansSwitch.exe --target "${{ github.sha }}" `
+          gh release create "v$version" "dist/DeadMansSwitch-Setup-$version.exe" "dist/DeadMansSwitch-$version.exe" `
+            dist/DeadMansSwitch.exe --target "${{ github.sha }}" `
             --title "Dead Man's Switch v$version" --notes-file release-notes.md

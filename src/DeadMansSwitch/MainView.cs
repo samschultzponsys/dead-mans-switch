@@ -26,6 +26,7 @@ namespace DeadMansSwitch
     sealed class MainView
     {
         enum Phase { Check, Warn }
+        enum Confirm { None, Pause, Quit }
 
         const int TickMs = 250;
         const int RefrontEveryMs = 2000;   // during the warning, pull the window forward this often
@@ -39,6 +40,10 @@ namespace DeadMansSwitch
         static readonly Brush PausedRing = Frozen(Color.FromRgb(0x5A, 0x5F, 0x6B));
         static readonly Brush ErrorText = Frozen(Color.FromRgb(0xF0, 0x8A, 0x7E));
         static readonly Brush InfoText = Frozen(Color.FromRgb(0x8B, 0x90, 0x9A));
+        static readonly Brush Amber = Frozen(Color.FromRgb(0xF5, 0xB0, 0x41));
+        static readonly Brush DarkText = Frozen(Color.FromRgb(0x1E, 0x15, 0x05));
+        static readonly Brush StopRed = Frozen(Color.FromRgb(0xE7, 0x4C, 0x3C));
+        static readonly Brush White = Frozen(Colors.White);
 
         public Window Window { get; }
 
@@ -60,13 +65,16 @@ namespace DeadMansSwitch
         bool headless;         // --selftest/--screenshot: never show the real window
         bool spaceClaimed;     // Space is a system-wide hotkey for this window (final warning only)
         const int SpaceHotkeyId = 1;
+        Confirm pendingConfirm;
         UpdateInfo update;
         TrayIcon tray;
 
         readonly Border root, updateBanner;
-        readonly FrameworkElement mainPanel, settingsPanel, changelogPanel, askTrayPanel;
+        readonly FrameworkElement mainPanel, settingsPanel, changelogPanel, askTrayPanel, confirmPanel;
         readonly List<FrameworkElement> panels;
         readonly TextBlock timeText, timeLabel, statusText, updateText, settingsMsg;
+        readonly TextBlock pauseIcon, pauseText, confirmIcon, confirmTitle, confirmText;
+        readonly Button confirmYesBtn;
         readonly Path ringPath;
         readonly Button versionBtn, extendBtn, pauseBtn, stopBtn, updateBtn, changelogUpdateBtn, changelogCloseBtn;
         readonly Panel changelogContent;
@@ -87,7 +95,14 @@ namespace DeadMansSwitch
             settingsPanel = Find<FrameworkElement>("SettingsPanel");
             changelogPanel = Find<FrameworkElement>("ChangelogPanel");
             askTrayPanel = Find<FrameworkElement>("AskTrayPanel");
-            panels = new List<FrameworkElement> { mainPanel, settingsPanel, changelogPanel, askTrayPanel };
+            confirmPanel = Find<FrameworkElement>("ConfirmPanel");
+            panels = new List<FrameworkElement> { mainPanel, settingsPanel, changelogPanel, askTrayPanel, confirmPanel };
+            pauseIcon = Find<TextBlock>("PauseIcon");
+            pauseText = Find<TextBlock>("PauseText");
+            confirmIcon = Find<TextBlock>("ConfirmIcon");
+            confirmTitle = Find<TextBlock>("ConfirmTitle");
+            confirmText = Find<TextBlock>("ConfirmText");
+            confirmYesBtn = Find<Button>("ConfirmYesBtn");
             timeText = Find<TextBlock>("TimeText");
             timeLabel = Find<TextBlock>("TimeLabel");
             statusText = Find<TextBlock>("StatusText");
@@ -114,7 +129,9 @@ namespace DeadMansSwitch
 
             root.Background = background;
             versionBtn.Content = "v" + Updater.Current;
-            Find<Image>("AppIcon").Source = LoadIcon();
+            Find<Image>("AppIcon").Source = LoadImage("icon.png");
+            // Set explicitly: a window doesn't reliably pick up the exe's icon for its taskbar button.
+            Window.Icon = LoadImage("icon.ico");
 
             ringFigure.Segments.Add(ringArc);
             ringPath.Data = new PathGeometry { Figures = { ringFigure } };
@@ -122,7 +139,9 @@ namespace DeadMansSwitch
             Find<Grid>("TitleBar").MouseLeftButtonDown += (s, e) => { if (e.ButtonState == MouseButtonState.Pressed) Window.DragMove(); };
             Find<Button>("MinBtn").Click += (s, e) => Window.WindowState = WindowState.Minimized;
             Find<Button>("CloseBtn").Click += (s, e) => RequestClose();
-            stopBtn.Click += (s, e) => Quit();
+            stopBtn.Click += (s, e) => AskToConfirm(Confirm.Quit);
+            confirmYesBtn.Click += (s, e) => ConfirmYes();
+            Find<Button>("ConfirmNoBtn").Click += (s, e) => ShowPanel(mainPanel);
             Find<Button>("SettingsBtn").Click += (s, e) => ToggleSettings();
             Find<Button>("BackBtn").Click += (s, e) => ShowPanel(mainPanel);
             Find<Button>("SaveBtn").Click += (s, e) => SaveSettings();
@@ -136,7 +155,7 @@ namespace DeadMansSwitch
             Find<Button>("TrayNoBtn").Click += (s, e) => AnswerTrayQuestion(false);
             versionBtn.Click += (s, e) => ShowChangelog();
             extendBtn.Click += (s, e) => ImHere();
-            pauseBtn.Click += (s, e) => TogglePause();
+            pauseBtn.Click += (s, e) => PauseOrResume();
             updateBtn.Click += async (s, e) => await InstallUpdate();
             changelogUpdateBtn.Click += async (s, e) => await InstallUpdate();
 
@@ -145,6 +164,7 @@ namespace DeadMansSwitch
             Window.PreviewKeyDown += (s, e) =>
             {
                 if (e.Key == Key.Space && phase == Phase.Warn && !failed) { ImHere(); e.Handled = true; }
+                else if (e.Key == Key.Escape && confirmPanel.Visibility == Visibility.Visible) { ShowPanel(mainPanel); e.Handled = true; }
             };
             // Swallow keyboard menu mode (a lone Alt tap, or Alt+Space). There's
             // no menu to show, and while in it the window ignores the next key,
@@ -212,15 +232,13 @@ namespace DeadMansSwitch
             Assembly.GetExecutingAssembly().GetManifestResourceStream("DeadMansSwitch." + name)
             ?? throw new InvalidOperationException($"Missing embedded resource {name}.");
 
-        static ImageSource LoadIcon()
+        /// <summary>Loads an embedded image; an .ico keeps all its sizes, so Windows picks the right one.</summary>
+        static ImageSource LoadImage(string name)
         {
-            var image = new BitmapImage();
-            image.BeginInit();
-            image.StreamSource = Resource("icon.png");
-            image.CacheOption = BitmapCacheOption.OnLoad;
-            image.EndInit();
-            image.Freeze();
-            return image;
+            using var stream = Resource(name);
+            var frame = BitmapFrame.Create(stream, BitmapCreateOptions.None, BitmapCacheOption.OnLoad);
+            frame.Freeze();
+            return frame;
         }
 
         static Brush Frozen(Color c)
@@ -229,6 +247,13 @@ namespace DeadMansSwitch
             b.Freeze();
             return b;
         }
+
+        string ActionVerb => settings.EndAction switch
+        {
+            EndAction.Restart => "restart",
+            EndAction.Hibernate => "hibernate",
+            _ => "shut down",
+        };
 
         string ActionNoun => settings.EndAction switch
         {
@@ -301,7 +326,8 @@ namespace DeadMansSwitch
 
         void ShowPauseState()
         {
-            pauseBtn.Content = paused ? "Resume" : "Pause";
+            pauseIcon.Text = paused ? "\uE768" : "\uE769";   // play / pause glyphs
+            pauseText.Text = paused ? "Resume" : "Pause";
             ringPath.Stroke = paused ? PausedRing : GreenRing;
             timeLabel.Text = paused ? "paused" : "until next check";
             statusText.Text = paused
@@ -453,10 +479,59 @@ namespace DeadMansSwitch
             spaceClaimed = false;
         }
 
+        /// <summary>Resume needs no confirmation; pausing does.</summary>
+        void PauseOrResume()
+        {
+            if (paused) TogglePause();
+            else AskToConfirm(Confirm.Pause);
+        }
+
+        /// <summary>
+        /// Shows the confirmation for pausing or for stopping the timer and
+        /// quitting, opening the window first if it's in the tray.
+        /// </summary>
+        void AskToConfirm(Confirm what)
+        {
+            if (what == Confirm.Pause && (phase != Phase.Check || failed)) return;
+            if (!headless) ShowWindow();
+            pendingConfirm = what;
+            if (what == Confirm.Pause)
+            {
+                confirmIcon.Text = "\uE769";
+                confirmIcon.Foreground = Amber;
+                confirmTitle.Text = "Pause the timer?";
+                confirmText.Text = $"While it's paused, the PC won't {ActionVerb} no matter how long nobody answers. Resume any time.";
+                confirmYesBtn.Content = "Pause the timer";
+                confirmYesBtn.Background = Amber;
+                confirmYesBtn.Foreground = DarkText;
+            }
+            else
+            {
+                confirmIcon.Text = "\uE71A";
+                confirmIcon.Foreground = StopRed;
+                confirmTitle.Text = "Stop the timer and quit?";
+                confirmText.Text = $"Dead Man's Switch will close, and the PC won't {ActionVerb} when the time runs out.";
+                confirmYesBtn.Content = "Stop and quit";
+                confirmYesBtn.Background = StopRed;
+                confirmYesBtn.Foreground = White;
+            }
+            ShowPanel(confirmPanel);
+        }
+
+        void ConfirmYes()
+        {
+            var what = pendingConfirm;
+            pendingConfirm = Confirm.None;
+            ShowPanel(mainPanel);
+            if (what == Confirm.Pause && !paused) TogglePause();   // ignored if the warning started meanwhile
+            else if (what == Confirm.Quit) Quit();
+        }
+
         void EnsureTray()
         {
             if (tray != null) return;
-            tray = new TrayIcon(open: ShowWindow, imHere: ImHere, togglePause: TogglePause, quit: Quit);
+            tray = new TrayIcon(open: ShowWindow, imHere: ImHere, togglePause: PauseOrResume,
+                quit: () => AskToConfirm(Confirm.Quit));
             tray.SetPause(paused, enabled: phase == Phase.Check && !failed);
         }
 
@@ -472,7 +547,7 @@ namespace DeadMansSwitch
             switch (settings.CloseToTray)
             {
                 case true: HideToTray(); break;
-                case false: Quit(); break;
+                case false: AskToConfirm(Confirm.Quit); break;
                 default: ShowPanel(askTrayPanel); break;
             }
         }
@@ -597,7 +672,7 @@ namespace DeadMansSwitch
         {
             if (update == null || settings.SeenReleaseNotesFor == update.Version) return;
             if (!Window.IsVisible || phase == Phase.Warn || settingsPanel.Visibility == Visibility.Visible
-                || askTrayPanel.Visibility == Visibility.Visible) return;
+                || askTrayPanel.Visibility == Visibility.Visible || confirmPanel.Visibility == Visibility.Visible) return;
             settings.SeenReleaseNotesFor = update.Version;
             TrySave();
             ShowChangelog();
@@ -685,6 +760,10 @@ namespace DeadMansSwitch
             Shot("changelog", phaseSeconds * 0.62);
             ShowPanel(askTrayPanel);
             Shot("tray-question", phaseSeconds * 0.62);
+            AskToConfirm(Confirm.Pause);
+            Shot("confirm-pause", phaseSeconds * 0.62);
+            AskToConfirm(Confirm.Quit);
+            Shot("confirm-quit", phaseSeconds * 0.62);
             StartWarning();
             background.Color = WarnBg;
             Shot("warning", 23.4);
@@ -695,9 +774,15 @@ namespace DeadMansSwitch
         {
             headless = true;
             StartCheck();
-            TogglePause();
-            if (!paused) throw new Exception("Pause did not pause.");
-            TogglePause();
+            PauseOrResume();
+            if (paused || confirmPanel.Visibility != Visibility.Visible) throw new Exception("Pause didn't ask for confirmation.");
+            ConfirmYes();
+            if (!paused) throw new Exception("Confirming pause did not pause.");
+            PauseOrResume();
+            if (paused) throw new Exception("Resume did not resume.");
+            AskToConfirm(Confirm.Quit);
+            ShowPanel(mainPanel);   // "Keep the timer running"
+            if (quitting) throw new Exception("Backing out of quit still quit.");
             ToggleSettings();
             FillSettingsForm(new Settings());
             ShowChangelog();

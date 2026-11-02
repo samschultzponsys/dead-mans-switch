@@ -6,6 +6,25 @@ Versions are `MAJOR.MINOR` with a single-digit minor that rolls over after 9
 
 ## [Unreleased]
 
+## [1.4] - 2026-11-02
+
+### Added
+- **Installer**: `DeadMansSwitch-Setup-1.4.exe` installs the app for your
+  Windows account (no admin needed), adds it to the Start menu (and the
+  desktop, if you tick the box), and lists it in Settings > Apps so it can be
+  uninstalled. Installed copies update by running the new installer quietly
+  and reopen afterwards. The portable exe is still available.
+- **Pause** and **Stop & quit** ask for confirmation first, from the window
+  and from the tray menu. Closing the window with × when it's set to quit
+  asks too. Resume doesn't, and Esc backs out of a confirmation.
+
+### Changed
+- Pause and Stop are now distinct outlined buttons with icons: amber for
+  Pause, red for Stop.
+
+### Fixed
+- The taskbar button showed no icon.
+
 ## [1.3] - 2026-10-29
 
 ### Fixed

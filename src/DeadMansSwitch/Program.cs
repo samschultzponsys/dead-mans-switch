@@ -17,7 +17,7 @@ namespace DeadMansSwitch
         [STAThread]
         static int Main(string[] args)
         {
-            if (args.Contains("--selftest")) return SelfTest();
+            if (args.Contains("--selftest")) return SelfTest(expectInstalled: args.Contains("--expect-installed"));
             int shot = Array.IndexOf(args, "--screenshot");
             if (shot >= 0 && shot + 1 < args.Length)
             {
@@ -70,10 +70,13 @@ namespace DeadMansSwitch
         /// CI runs this on Windows, since the XAML is only parsed at runtime.
         /// Exit code 0 means it passed.
         /// </summary>
-        static int SelfTest()
+        static int SelfTest(bool expectInstalled)
         {
             try
             {
+                if (Updater.IsInstalled != expectInstalled)
+                    throw new Exception(expectInstalled ? "Not recognised as installed." : "A portable copy thinks it's installed.");
+
                 string path = Path.Combine(Path.GetTempPath(), $"dms-selftest-{Guid.NewGuid():N}.json");
                 var saved = new Settings { CheckMinutes = 90, WarnSeconds = 45, EndAction = EndAction.Hibernate, PlaySound = false, CloseToTray = true };
                 saved.Save(path);
