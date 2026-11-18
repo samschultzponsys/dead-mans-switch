@@ -1,35 +1,30 @@
 using System;
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 
 namespace DeadMansSwitch
 {
-    static class NativeMethods
+    /// <summary>Win32 calls used on Windows only (see <see cref="Platform"/>).</summary>
+    [SupportedOSPlatform("windows")]
+    static class WindowsNative
     {
         const byte VK_MENU = 0x12;   // Alt
         const uint KEYEVENTF_KEYUP = 0x2;
-
-        public const int WM_SYSCOMMAND = 0x0112;
-        public const int SC_KEYMENU = 0xF100;   // keyboard menu mode, entered on a lone Alt tap
-        public const int WM_HOTKEY = 0x0312;
         const uint MOD_NOREPEAT = 0x4000;
         const uint VK_SPACE = 0x20;
+        const uint MB_ICONEXCLAMATION = 0x30;
 
-        [DllImport("user32.dll", SetLastError = true)]
+        public const uint WM_SYSCOMMAND = 0x0112;
+        public const int SC_KEYMENU = 0xF100;   // keyboard menu mode, entered on a lone Alt tap
+        public const uint WM_HOTKEY = 0x0312;
+
+        [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
         static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
 
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
         static extern bool UnregisterHotKey(IntPtr hWnd, int id);
-
-        /// <summary>
-        /// Claims the Space key system-wide: while registered, Space presses in
-        /// any app arrive at hWnd as WM_HOTKEY instead. False if another app
-        /// already holds it.
-        /// </summary>
-        public static bool ClaimSpace(IntPtr hWnd, int id) => RegisterHotKey(hWnd, id, MOD_NOREPEAT, VK_SPACE);
-
-        public static void ReleaseSpace(IntPtr hWnd, int id) => UnregisterHotKey(hWnd, id);
 
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
@@ -40,7 +35,7 @@ namespace DeadMansSwitch
         static extern bool BringWindowToTop(IntPtr hWnd);
 
         [DllImport("user32.dll")]
-        public static extern IntPtr GetForegroundWindow();
+        static extern IntPtr GetForegroundWindow();
 
         [DllImport("user32.dll")]
         static extern uint GetWindowThreadProcessId(IntPtr hWnd, IntPtr processId);
@@ -54,6 +49,22 @@ namespace DeadMansSwitch
 
         [DllImport("user32.dll")]
         static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        static extern bool MessageBeep(uint uType);
+
+        /// <summary>
+        /// Claims the Space key system-wide: while registered, Space presses in
+        /// any app arrive at hWnd as WM_HOTKEY instead. False if another app
+        /// already holds it.
+        /// </summary>
+        public static bool ClaimSpace(IntPtr hWnd, int id) => RegisterHotKey(hWnd, id, MOD_NOREPEAT, VK_SPACE);
+
+        public static void ReleaseSpace(IntPtr hWnd, int id) => UnregisterHotKey(hWnd, id);
+
+        /// <summary>The system's own warning sound.</summary>
+        public static void Beep() => MessageBeep(MB_ICONEXCLAMATION);
 
         /// <summary>
         /// Makes hWnd the foreground window even though another app has it.

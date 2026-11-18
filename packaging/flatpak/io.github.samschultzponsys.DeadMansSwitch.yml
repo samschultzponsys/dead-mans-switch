@@ -1,0 +1,38 @@
+# Flatpak build of Dead Man's Switch. CI copies the linux-x64 publish into
+# packaging/flatpak/input/app (with the desktop entry, metadata and icons) and
+# builds a single-file bundle, DeadMansSwitch-X.Y.flatpak, from this manifest.
+#
+# The app is already compiled, so this only arranges files; it needs the
+# freedesktop runtime and nothing else.
+app-id: io.github.samschultzponsys.DeadMansSwitch
+runtime: org.freedesktop.Platform
+runtime-version: '25.08'
+sdk: org.freedesktop.Sdk
+command: dead-mans-switch
+finish-args:
+  # Avalonia draws through X11 (XWayland on Wayland desktops).
+  - --socket=x11
+  - --share=ipc
+  - --device=dri
+  # Update checks against GitHub.
+  - --share=network
+  # The final-warning sound.
+  - --socket=pulseaudio
+  # Shutting down, restarting or hibernating through systemd-logind.
+  - --system-talk-name=org.freedesktop.login1
+  # The tray icon (StatusNotifierItem); the app registers its icon under an org.kde name.
+  - --talk-name=org.kde.StatusNotifierWatcher
+  - --own-name=org.kde.*
+modules:
+  - name: dead-mans-switch
+    buildsystem: simple
+    build-commands:
+      - install -d /app/lib/dead-mans-switch /app/bin
+      - cp -a app/. /app/lib/dead-mans-switch/
+      - ln -s ../lib/dead-mans-switch/DeadMansSwitch /app/bin/dead-mans-switch
+      - install -Dm644 io.github.samschultzponsys.DeadMansSwitch.desktop /app/share/applications/io.github.samschultzponsys.DeadMansSwitch.desktop
+      - install -Dm644 io.github.samschultzponsys.DeadMansSwitch.metainfo.xml /app/share/metainfo/io.github.samschultzponsys.DeadMansSwitch.metainfo.xml
+      - for size in 16 24 32 48 64 128 256 512; do install -Dm644 icons/$size.png /app/share/icons/hicolor/${size}x${size}/apps/io.github.samschultzponsys.DeadMansSwitch.png; done
+    sources:
+      - type: dir
+        path: input

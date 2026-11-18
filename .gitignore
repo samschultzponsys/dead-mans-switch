@@ -3,3 +3,7 @@ bin/
 obj/
 *.new
 *.old
+packaging/flatpak/input/
+.flatpak-builder/
+flatpak-build/
+flatpak-repo/

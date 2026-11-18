@@ -1,6 +1,9 @@
-# Builds DeadMansSwitch.exe on Windows and runs its self-test on every push.
-# When main carries a VERSION that has no release yet, also tags it vX.Y and
-# publishes the GitHub Release the in-app updater looks for.
+# Builds Dead Man's Switch for Windows and Linux and tests every package the
+# way a user would install it:
+#   - Windows: the Inno Setup installer, in install and portable mode
+#   - Linux:   .deb on Debian, .rpm on Fedora (in containers), and a Flatpak bundle
+# When main carries a VERSION that has no release yet, the release job tags it
+# vX.Y and publishes all four downloads; the in-app updaters look for them.
 name: Build
 
 on:
@@ -17,24 +20,141 @@ concurrency:
   group: build-${{ github.ref }}
   cancel-in-progress: false
 
+env:
+  DOTNET_NOLOGO: 1
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+  APP_ID: io.github.samschultzponsys.DeadMansSwitch
+
 jobs:
-  build:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Publish
+        run: dotnet publish src/DeadMansSwitch/DeadMansSwitch.csproj -c Release -r linux-x64 -o dist/linux-x64
+
+      - name: Self-test
+        run: dist/linux-x64/DeadMansSwitch --selftest --expect-kind unmanaged
+
+      - name: Build .deb and .rpm
+        run: |
+          sudo apt-get install -y -qq rpm
+          packaging/linux/build-packages.sh "$(cat VERSION)" dist/linux-x64 dist
+
+      - name: Test the .deb on Debian
+        run: |
+          docker run --rm -v "$PWD/dist:/dist:ro" debian:stable bash -c '
+            set -e
+            apt-get update -qq
+            apt-get install -y -qq --no-install-recommends /dist/*.deb > /dev/null
+            dead-mans-switch --selftest --expect-kind deb'
+
+      - name: Test the .rpm on Fedora
+        run: |
+          docker run --rm -v "$PWD/dist:/dist:ro" fedora:latest bash -c '
+            set -e
+            dnf install -y -q /dist/*.rpm
+            dead-mans-switch --selftest --expect-kind rpm'
+
+      - name: Prepare Flatpak input
+        run: |
+          input=packaging/flatpak/input
+          mkdir -p "$input"
+          cp -a dist/linux-x64 "$input/app"
+          cp -a assets/icons "$input/icons"
+          cp packaging/linux/$APP_ID.desktop "$input/"
+          sed -e "s/@VERSION@/$(cat VERSION)/" -e "s/@DATE@/$(date -u +%F)/" packaging/linux/$APP_ID.metainfo.xml > "$input/$APP_ID.metainfo.xml"
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: flatpak-input
+          path: packaging/flatpak/input/
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: linux-packages
+          path: |
+            dist/*.deb
+            dist/*.rpm
+
+      # Renders the real window in each state, so UI changes can be reviewed
+      # without running the app. Informational only; never blocks a release.
+      - name: Screenshots
+        continue-on-error: true
+        run: dist/linux-x64/DeadMansSwitch --screenshot screenshots
+
+      # Keeps the latest screenshots on the `screenshots` branch (one commit,
+      # replaced each time) so the README can show them. Manual runs on other
+      # branches go to `screenshots-preview`, to review UI changes before release.
+      - name: Publish screenshots
+        if: github.event_name != 'pull_request'
+        continue-on-error: true
+        run: |
+          target=$([ "$GITHUB_REF" = refs/heads/main ] && echo screenshots || echo screenshots-preview)
+          cd screenshots
+          git init -q -b screenshots
+          git add -A
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "Screenshots for $GITHUB_SHA"
+          git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" "screenshots:$target"
+
+  flatpak:
+    needs: linux
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:freedesktop-25.08
+      options: --privileged
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v7
+        with:
+          name: flatpak-input
+          path: packaging/flatpak/input
+
+      - name: Prepare
+        run: |
+          echo "VERSION=$(cat VERSION)" >> "$GITHUB_ENV"
+          chmod +x packaging/flatpak/input/app/DeadMansSwitch   # artifacts drop the executable bit
+
+      # Flathub's own builder action, made for this container (it handles the
+      # container's quirks: no FUSE, no machine ID, the preinstalled runtimes).
+      - uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+        with:
+          manifest-path: packaging/flatpak/io.github.samschultzponsys.DeadMansSwitch.yml
+          bundle: DeadMansSwitch-${{ env.VERSION }}.flatpak
+          cache: false
+          upload-artifact: false
+
+      - name: Test the bundle
+        run: |
+          [ -s /etc/machine-id ] || dbus-uuidgen > /etc/machine-id
+          flatpak install --user -y --noninteractive "DeadMansSwitch-$VERSION.flatpak"
+          flatpak run --user $APP_ID --selftest --expect-kind flatpak
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: flatpak
+          path: DeadMansSwitch-*.flatpak
+
+  windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 8.0.x
 
-      - name: Build
-        shell: pwsh
-        run: |
-          dotnet build src/DeadMansSwitch/DeadMansSwitch.csproj -c Release -o dist
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Publish
+        run: dotnet publish src/DeadMansSwitch/DeadMansSwitch.csproj -c Release -r win-x64 -o dist/win-x64
 
-      # The window's XAML is only parsed at runtime, so build success alone
-      # doesn't prove the app starts.
       - name: Self-test
         shell: pwsh
         run: |
-          $p = Start-Process dist\DeadMansSwitch.exe -ArgumentList '--selftest' -Wait -PassThru `
+          $p = Start-Process dist\win-x64\DeadMansSwitch.exe -ArgumentList '--selftest', '--expect-kind', 'windows-portable' -Wait -PassThru `
                  -RedirectStandardOutput out.txt -RedirectStandardError err.txt
           Get-Content out.txt, err.txt
           if ($p.ExitCode -ne 0) { throw "Self-test failed with exit code $($p.ExitCode)" }
@@ -66,7 +186,7 @@ jobs:
           $shown = (Get-ItemProperty $key).DisplayVersion
           if ($shown -ne $version) { throw "Apps list shows version '$shown', expected $version" }
 
-          $p = Start-Process $exe -ArgumentList '--selftest', '--expect-installed' -Wait -PassThru `
+          $p = Start-Process $exe -ArgumentList '--selftest', '--expect-kind', 'windows-installed' -Wait -PassThru `
                  -RedirectStandardOutput inst-out.txt -RedirectStandardError inst-err.txt
           Get-Content inst-out.txt, inst-err.txt
           if ($p.ExitCode -ne 0) { throw "The installed app failed its self-test" }
@@ -86,63 +206,48 @@ jobs:
           if (-not (Test-Path "$portable\DeadMansSwitch.portable")) { throw "Portable setup did not leave its marker" }
           if (Test-Path "$portable\unins000.exe") { throw "Portable setup added an uninstaller" }
           if (Test-Path $key) { throw "Portable setup added an Apps list entry" }
-          $p = Start-Process "$portable\DeadMansSwitch.exe" -ArgumentList '--selftest', '--expect-portable' -Wait -PassThru `
+          $p = Start-Process "$portable\DeadMansSwitch.exe" -ArgumentList '--selftest', '--expect-kind', 'windows-portable' -Wait -PassThru `
                  -RedirectStandardOutput port-out.txt -RedirectStandardError port-err.txt
           Get-Content port-out.txt, port-err.txt
           if ($p.ExitCode -ne 0) { throw "The portable copy failed its self-test" }
           Write-Host "Portable mode passed (v$version)."
 
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v6
         with:
-          name: DeadMansSwitch-Setup
+          name: windows-setup
           path: dist/DeadMansSwitch-Setup-*.exe
 
-      # Renders the real window in each state, so UI changes can be reviewed
-      # without a Windows machine. Informational only; never blocks a release.
-      - name: Screenshots
-        continue-on-error: true
-        shell: pwsh
-        run: |
-          $p = Start-Process dist\DeadMansSwitch.exe -ArgumentList '--screenshot', 'screenshots' -Wait -PassThru
-          if ($p.ExitCode -ne 0) { throw "Screenshot run failed with exit code $($p.ExitCode)" }
-          Get-ChildItem screenshots
-
-      - uses: actions/upload-artifact@v5
-        continue-on-error: true
+  release:
+    needs: [linux, flatpak, windows]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v7
         with:
-          name: screenshots
-          path: screenshots/
-
-      # Keeps the latest screenshots on the `screenshots` branch (one commit,
-      # replaced each time) so the README can show them. Manual runs on other
-      # branches go to `screenshots-preview`, to review UI changes before release.
-      - name: Publish screenshots
-        if: github.event_name != 'pull_request'
-        continue-on-error: true
-        shell: pwsh
-        run: |
-          $target = if ("${{ github.ref }}" -eq 'refs/heads/main') { 'screenshots' } else { 'screenshots-preview' }
-          cd screenshots
-          git init -q -b screenshots
-          git add -A
-          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" `
-            commit -q -m "Screenshots for ${{ github.sha }}"
-          git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" "screenshots:$target"
+          path: downloads
+          pattern: '{windows-setup,linux-packages,flatpak}'
+          merge-multiple: true
 
       - name: Release new version
-        if: github.ref == 'refs/heads/main'
-        shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $version = (Get-Content VERSION -Raw).Trim()
-          gh release view "v$version" *> $null
-          if ($LASTEXITCODE -eq 0) { Write-Host "v$version is already released."; exit 0 }
+          version=$(cat VERSION)
+          if gh release view "v$version" > /dev/null 2>&1; then echo "v$version is already released."; exit 0; fi
 
-          $text = Get-Content CHANGELOG.md -Raw
-          $pattern = "(?ms)^## \[$([regex]::Escape($version))\][^\n]*\n(.*?)(?=^## \[|\z)"
-          if ($text -notmatch $pattern) { throw "CHANGELOG.md has no section for $version." }
-          Set-Content -Path release-notes.md -Value $Matches[1].Trim()
+          python3 - "$version" > release-notes.md <<'EOF'
+          import re, sys
+          text = open("CHANGELOG.md").read()
+          m = re.search(r"(?ms)^## \[" + re.escape(sys.argv[1]) + r"\][^\n]*\n(.*?)(?=^## \[|\Z)", text)
+          if not m: sys.exit(f"CHANGELOG.md has no section for {sys.argv[1]}.")
+          print(m.group(1).strip())
+          EOF
 
-          gh release create "v$version" "dist/DeadMansSwitch-Setup-$version.exe" --target "${{ github.sha }}" `
-            --title "Dead Man's Switch v$version" --notes-file release-notes.md
+          ls -l downloads
+          gh release create "v$version" \
+            "downloads/DeadMansSwitch-Setup-$version.exe" \
+            "downloads/dead-mans-switch_${version}_amd64.deb" \
+            "downloads/dead-mans-switch-$version-1.x86_64.rpm" \
+            "downloads/DeadMansSwitch-$version.flatpak" \
+            --target "$GITHUB_SHA" --title "Dead Man's Switch v$version" --notes-file release-notes.md

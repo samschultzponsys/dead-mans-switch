@@ -1,7 +1,7 @@
 ; Inno Setup script for Dead Man's Switch. CI compiles it with
 ;   iscc /DAppVersion=X.Y installer\DeadMansSwitch.iss
-; after building dist\DeadMansSwitch.exe, producing dist\DeadMansSwitch-Setup-X.Y.exe,
-; the only file a release ships.
+; after publishing the app to dist\win-x64 (the exe and its native libraries),
+; producing dist\DeadMansSwitch-Setup-X.Y.exe, the release's Windows download.
 ;
 ; The first page asks how to set it up:
 ;  - Install: per user (no admin prompt) under %LOCALAPPDATA%\Programs, with a
@@ -53,7 +53,7 @@ RestartApplications=no
 Name: desktopicon; Description: "Create a desktop shortcut"; Flags: unchecked; Check: not IsPortable
 
 [Files]
-Source: "..\dist\DeadMansSwitch.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\dist\win-x64\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{autoprograms}\Dead Man's Switch"; Filename: "{app}\DeadMansSwitch.exe"; Check: not IsPortable
