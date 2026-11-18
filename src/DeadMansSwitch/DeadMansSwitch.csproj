@@ -1,18 +1,22 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    .NET Framework 4.8 ships with Windows 10 and 11, so the exe runs without
-    installing a runtime. WPF is referenced directly and the window's XAML is
-    loaded at runtime, which keeps the build working with any .NET SDK,
-    including on Linux.
+    One app for Windows and Linux: Avalonia on .NET 8. Releases are published
+    self-contained (no .NET install needed), e.g.
+      dotnet publish -c Release -r win-x64   -o dist/win
+      dotnet publish -c Release -r linux-x64 -o dist/linux
+    and then packaged: an Inno Setup installer for Windows, .deb/.rpm/Flatpak
+    for Linux (see installer/ and packaging/).
   -->
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net48</TargetFramework>
+    <TargetFramework>net8.0</TargetFramework>
     <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
     <AssemblyName>DeadMansSwitch</AssemblyName>
     <RootNamespace>DeadMansSwitch</RootNamespace>
     <ApplicationIcon>../../assets/DeadMansSwitch.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
     <Version>$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)../../VERSION').Trim())</Version>
     <Product>Dead Man's Switch</Product>
     <AssemblyTitle>Dead Man's Switch</AssemblyTitle>
@@ -20,26 +24,37 @@
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <DebugType>none</DebugType>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <!-- No localisation, so skip ICU: one less library for Linux packages to depend on. -->
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' != ''">
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <!-- Drops the parts of .NET the app doesn't use (it's written to allow that:
+         compiled XAML bindings, source-generated JSON). Roughly halves the download. -->
+    <PublishTrimmed>true</PublishTrimmed>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
-    <Reference Include="PresentationCore" />
-    <Reference Include="PresentationFramework" />
-    <Reference Include="WindowsBase" />
-    <Reference Include="System.Xaml" />
-    <Reference Include="System.Net.Http" />
-    <Reference Include="System.Runtime.Serialization" />
-    <Reference Include="System.Security" />
-    <!-- Only for the tray icon; WPF has no NotifyIcon of its own. -->
-    <Reference Include="System.Windows.Forms" />
-    <Reference Include="System.Drawing" />
+    <PackageReference Include="Avalonia" Version="11.3.22" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.3.22" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.22" />
+    <!-- Renders without a display, for the self-test and the CI screenshots. -->
+    <PackageReference Include="Avalonia.Headless" Version="11.3.22" />
+    <!-- D-Bus, for shutting down through systemd-logind on Linux (already used by Avalonia). -->
+    <PackageReference Include="Tmds.DBus.Protocol" Version="0.21.3" />
+    <!-- Windows only: encrypts the GitHub token for the user's account (DPAPI). -->
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
   </ItemGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="MainWindow.xaml" LogicalName="DeadMansSwitch.MainWindow.xaml" />
-    <EmbeddedResource Include="../../assets/DeadMansSwitch.png" LogicalName="DeadMansSwitch.icon.png" />
-    <EmbeddedResource Include="../../assets/DeadMansSwitch.ico" LogicalName="DeadMansSwitch.icon.ico" />
+    <AvaloniaResource Include="../../assets/fonts/*.otf" Link="Assets/Fonts/%(Filename)%(Extension)" />
+    <AvaloniaResource Include="../../assets/DeadMansSwitch.png" Link="Assets/icon.png" />
+    <AvaloniaResource Include="../../assets/DeadMansSwitch.ico" Link="Assets/icon.ico" />
+    <EmbeddedResource Include="../../assets/warning.wav" LogicalName="DeadMansSwitch.warning.wav" />
     <EmbeddedResource Include="../../CHANGELOG.md" LogicalName="DeadMansSwitch.CHANGELOG.md" />
   </ItemGroup>
 

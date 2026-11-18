@@ -1,84 +1,73 @@
 using System;
-using System.Diagnostics;
 using System.IO;
-using System.Runtime.Serialization;
-using System.Runtime.Serialization.Json;
-using System.Security.Cryptography;
-using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace DeadMansSwitch
 {
     public enum EndAction { Shutdown, Restart, Hibernate }
 
+    /// <summary>JSON code generated at build time, so publishing can trim unused framework code safely.</summary>
+    [JsonSourceGenerationOptions(WriteIndented = true, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonSerializable(typeof(Settings))]
+    [JsonSerializable(typeof(GitHubRelease[]))]
+    internal partial class AppJson : JsonSerializerContext { }
+
     /// <summary>
-    /// User settings, stored as JSON in %APPDATA%\DeadMansSwitch\settings.json,
-    /// or beside the exe for a portable copy.
-    /// Fields are nullable because the serializer leaves missing keys null
-    /// (older files only have CheckMinutes and WarnSeconds); <see cref="Normalize"/>
-    /// fills those and any out-of-range values with defaults.
+    /// User settings, stored as JSON: %APPDATA%\DeadMansSwitch\settings.json on
+    /// Windows, ~/.config/DeadMansSwitch/settings.json on Linux (inside a
+    /// Flatpak, its own ~/.var/app folder), or beside the exe for a portable
+    /// Windows copy. Fields are nullable so a key missing from an older file
+    /// can be told apart; <see cref="Normalize"/> fills it in.
     /// </summary>
-    [DataContract]
     public sealed class Settings
     {
         public const int MinCheckMinutes = 1, MaxCheckMinutes = 1440;
         public const int MinWarnSeconds = 10, MaxWarnSeconds = 600;
 
-        static readonly string AppDataPath = Path.Combine(
+        static readonly string ConfigPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "DeadMansSwitch", "settings.json");
 
-        static string ExeDir => Path.GetDirectoryName(Process.GetCurrentProcess().MainModule.FileName);
+        /// <summary>True when the Windows installer set this copy up as portable (it leaves a marker file beside the exe).</summary>
+        public static bool IsPortable => File.Exists(Path.Combine(AppContext.BaseDirectory, "DeadMansSwitch.portable"));
 
-        /// <summary>True when the installer set this copy up as portable (it leaves a marker file beside the exe).</summary>
-        public static bool IsPortable => File.Exists(Path.Combine(ExeDir, "DeadMansSwitch.portable"));
+        public static readonly string FilePath = IsPortable ? Path.Combine(AppContext.BaseDirectory, "settings.json") : ConfigPath;
 
-        public static readonly string FilePath = IsPortable ? Path.Combine(ExeDir, "settings.json") : AppDataPath;
-
-        // Ties the encrypted token to this app as well as to the Windows account.
-        static readonly byte[] TokenEntropy = Encoding.UTF8.GetBytes("DeadMansSwitch.GitHubToken");
-
-        [DataMember(Order = 1)] public int? CheckMinutes { get; set; }
-        [DataMember(Order = 2)] public int? WarnSeconds { get; set; }
-        [DataMember(Order = 3)] public string Action { get; set; }
-        [DataMember(Order = 4)] public bool? PlaySound { get; set; }
-        [DataMember(Order = 5)] public bool? CheckForUpdates { get; set; }
+        public int? CheckMinutes { get; set; }
+        public int? WarnSeconds { get; set; }
+        public string Action { get; set; }
+        public bool? PlaySound { get; set; }
+        public bool? CheckForUpdates { get; set; }
 
         /// <summary>Hide to the tray instead of quitting when closed. Null until the user is first asked.</summary>
-        [DataMember(Order = 6)] public bool? CloseToTray { get; set; }
+        public bool? CloseToTray { get; set; }
 
         /// <summary>The installed version whose changelog was last shown on start.</summary>
-        [DataMember(Order = 7)] public string SeenChangelogFor { get; set; }
+        public string SeenChangelogFor { get; set; }
 
         /// <summary>The newest available release whose notes were already shown.</summary>
-        [DataMember(Order = 8)] public string SeenReleaseNotesFor { get; set; }
+        public string SeenReleaseNotesFor { get; set; }
 
         /// <summary>Install a newer version as soon as the app opens.</summary>
-        [DataMember(Order = 9)] public bool? AutoInstallUpdates { get; set; }
+        public bool? AutoInstallUpdates { get; set; }
 
-        /// <summary>The GitHub token, encrypted for the current Windows account (DPAPI). Use <see cref="GitHubToken"/>.</summary>
-        [DataMember(Order = 10)] public string GitHubTokenProtected { get; set; }
+        /// <summary>The GitHub token as stored (see <see cref="Platform.ProtectToken"/>). Use <see cref="GitHubToken"/>.</summary>
+        public string GitHubTokenProtected { get; set; }
 
         /// <summary>
         /// Optional GitHub token for update checks and downloads. Null when none is
-        /// saved, or when the saved one can't be decrypted (another account or PC).
+        /// saved, or when the saved one can't be read here (another account or PC).
         /// </summary>
+        [JsonIgnore]
         public string GitHubToken
         {
-            get
-            {
-                if (string.IsNullOrEmpty(GitHubTokenProtected)) return null;
-                try
-                {
-                    var bytes = ProtectedData.Unprotect(Convert.FromBase64String(GitHubTokenProtected), TokenEntropy, DataProtectionScope.CurrentUser);
-                    return Encoding.UTF8.GetString(bytes);
-                }
-                catch (Exception) { return null; }
-            }
-            set => GitHubTokenProtected = string.IsNullOrEmpty(value) ? null : Convert.ToBase64String(
-                ProtectedData.Protect(Encoding.UTF8.GetBytes(value), TokenEntropy, DataProtectionScope.CurrentUser));
+            get => Platform.UnprotectToken(GitHubTokenProtected);
+            set => GitHubTokenProtected = string.IsNullOrEmpty(value) ? null : Platform.ProtectToken(value);
         }
 
         public Settings() => Normalize();
 
+        [JsonIgnore]
         public EndAction EndAction
         {
             get => Enum.TryParse(Action, true, out EndAction a) ? a : EndAction.Shutdown;
@@ -101,11 +90,10 @@ namespace DeadMansSwitch
         public static Settings Load(string path = null)
         {
             // A portable copy's first run starts from the settings it had before.
-            if (path == null && !File.Exists(FilePath) && File.Exists(AppDataPath)) path = AppDataPath;
+            if (path == null && !File.Exists(FilePath) && File.Exists(ConfigPath)) path = ConfigPath;
             try
             {
-                using var stream = File.OpenRead(path ?? FilePath);
-                var settings = (Settings)new DataContractJsonSerializer(typeof(Settings)).ReadObject(stream);
+                var settings = JsonSerializer.Deserialize(File.ReadAllText(path ?? FilePath), AppJson.Default.Settings) ?? new Settings();
                 settings.Normalize();
                 return settings;
             }
@@ -119,9 +107,8 @@ namespace DeadMansSwitch
         {
             path ??= FilePath;
             Directory.CreateDirectory(Path.GetDirectoryName(path));
-            using var stream = File.Create(path);
-            using var writer = JsonReaderWriterFactory.CreateJsonWriter(stream, Encoding.UTF8, ownsStream: false, indent: true);
-            new DataContractJsonSerializer(typeof(Settings)).WriteObject(writer, this);
+            File.WriteAllText(path, JsonSerializer.Serialize(this, AppJson.Default.Settings));
+            Platform.RestrictToOwner(path);   // it can hold the GitHub token
         }
     }
 }

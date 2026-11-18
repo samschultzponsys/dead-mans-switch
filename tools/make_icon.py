@@ -1,4 +1,5 @@
-"""Draws assets/DeadMansSwitch.ico: a red power symbol on the app's dark tile.
+"""Draws the app icon (a red power symbol on the app's dark tile): assets/DeadMansSwitch.ico
+for Windows, and assets/icons/<size>.png for Linux.
 
 Run: python3 tools/make_icon.py   (needs Pillow)
 """
@@ -27,4 +28,10 @@ out = Path(__file__).resolve().parent.parent / "assets" / "DeadMansSwitch.ico"
 out.parent.mkdir(exist_ok=True)
 img.save(out, sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
 img.resize((256, 256), Image.LANCZOS).save(out.with_suffix(".png"))
-print(f"wrote {out}")
+
+# Linux desktops use one PNG per size (hicolor icon theme).
+icons = out.parent / "icons"
+icons.mkdir(exist_ok=True)
+for size in (16, 24, 32, 48, 64, 128, 256, 512):
+    img.resize((size, size), Image.LANCZOS).save(icons / f"{size}.png")
+print(f"wrote {out} and {icons}")

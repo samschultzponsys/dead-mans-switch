@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- AppStream metadata, so software centres (GNOME Software, KDE Discover) can
+     list the app. @VERSION@ and @DATE@ are filled in by the package builds. -->
+<component type="desktop-application">
+  <id>io.github.samschultzponsys.DeadMansSwitch</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <name>Dead Man's Switch</name>
+  <summary>Shuts the PC down unless you keep confirming you're there</summary>
+  <developer id="io.github.samschultzponsys">
+    <name>samschultzponsys</name>
+  </developer>
+  <description>
+    <p>
+      Leave a machine running for a download, a render or a game server without it
+      staying on all night if you fall asleep or walk away. A countdown asks you to
+      confirm you're still there; if nobody does, a final warning pops up, and then
+      the PC shuts down, restarts or hibernates.
+    </p>
+    <ul>
+      <li>Set the check interval, the final warning and what happens at the end</li>
+      <li>Pause the timer, or keep it running in the tray</li>
+      <li>Press Space during the final warning to keep the PC on</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">io.github.samschultzponsys.DeadMansSwitch.desktop</launchable>
+  <icon type="stock">io.github.samschultzponsys.DeadMansSwitch</icon>
+  <url type="homepage">https://github.com/samschultzponsys/dead-mans-switch</url>
+  <url type="bugtracker">https://github.com/samschultzponsys/dead-mans-switch/issues</url>
+  <screenshots>
+    <screenshot type="default">
+      <image>https://raw.githubusercontent.com/samschultzponsys/dead-mans-switch/screenshots/check.png</image>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/samschultzponsys/dead-mans-switch/screenshots/warning.png</image>
+    </screenshot>
+  </screenshots>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="@VERSION@" date="@DATE@"/>
+  </releases>
+</component>

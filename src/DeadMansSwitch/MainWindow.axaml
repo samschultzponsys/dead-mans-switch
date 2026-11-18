@@ -1,0 +1,184 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="DeadMansSwitch.MainWindow"
+        Title="Dead Man's Switch" Width="404" SizeToContent="Height"
+        SystemDecorations="None" CanResize="False" Topmost="True"
+        WindowStartupLocation="CenterScreen"
+        TransparencyLevelHint="Transparent" Background="Transparent"
+        Icon="avares://DeadMansSwitch/Assets/icon.ico">
+
+  <!-- The outer margin leaves room for the shadow; MainWindow drops it (and the
+       rounded corners) where the system can't draw a transparent window. -->
+  <Panel x:Name="Frame" Margin="14">
+    <Border x:Name="Root" CornerRadius="16" BorderBrush="#2A2D35" BorderThickness="1" Padding="18,12,18,18"
+            Background="#16181D" BoxShadow="0 3 22 0 #80000000">
+      <Border.Transitions>
+        <Transitions>
+          <BrushTransition Property="Background" Duration="0:0:0.4"/>
+        </Transitions>
+      </Border.Transitions>
+      <StackPanel>
+
+        <Grid x:Name="TitleBar" Background="Transparent" Margin="0,0,-8,0" ColumnDefinitions="*,Auto">
+          <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+            <Image Source="avares://DeadMansSwitch/Assets/icon.png" Width="18" Height="18"/>
+            <TextBlock Text="Dead Man's Switch" Foreground="{StaticResource TextBrush}" FontSize="13" FontWeight="SemiBold"
+                       Margin="8,0,0,0" VerticalAlignment="Center"/>
+            <Button x:Name="VersionBtn" Classes="link" Margin="6,1,0,0" VerticalAlignment="Center" ToolTip.Tip="What's new"/>
+          </StackPanel>
+          <StackPanel Grid.Column="1" Orientation="Horizontal">
+            <Button x:Name="SettingsBtn" Classes="icon" ToolTip.Tip="Settings">
+              <Path Classes="filled" Data="{StaticResource GearIcon}"/>
+            </Button>
+            <Button x:Name="MinBtn" Classes="icon" ToolTip.Tip="Minimize">
+              <Path Data="{StaticResource MinimizeIcon}"/>
+            </Button>
+            <Button x:Name="CloseBtn" Classes="icon" ToolTip.Tip="Close">
+              <Path Data="{StaticResource CloseIcon}"/>
+            </Button>
+          </StackPanel>
+        </Grid>
+
+        <Border x:Name="UpdateBanner" IsVisible="False" Background="#1D2A3B" CornerRadius="10"
+                Padding="12,8" Margin="0,10,0,0">
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock x:Name="UpdateText" Foreground="{StaticResource TextBrush}" FontSize="12"
+                       VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,10,0"/>
+            <Button x:Name="UpdateBtn" Grid.Column="1" Classes="primary" Content="Update" FontSize="12"
+                    Width="96" Height="28" Padding="0"/>
+          </Grid>
+        </Border>
+
+        <!-- All panels share one cell. MainWindow shows one at a time by making the
+             others transparent and inert, so the window keeps the size of the largest. -->
+        <Grid>
+          <StackPanel x:Name="MainPanel">
+            <Grid Width="232" Height="232" Margin="0,22,0,14">
+              <Ellipse Stroke="#262931" StrokeThickness="14"/>
+              <Path x:Name="RingArc" StrokeThickness="14" StrokeLineCap="Round"/>
+              <StackPanel VerticalAlignment="Center">
+                <TextBlock x:Name="TimeText" Foreground="{StaticResource TextBrush}" FontSize="50" FontWeight="SemiBold"
+                           HorizontalAlignment="Center" FontFeatures="+tnum"/>
+                <TextBlock x:Name="TimeLabel" Foreground="{StaticResource MutedBrush}" FontSize="13"
+                           HorizontalAlignment="Center" Margin="0,-2,0,0"/>
+              </StackPanel>
+            </Grid>
+            <TextBlock x:Name="StatusText" Foreground="{StaticResource MutedBrush}" FontSize="12"
+                       HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" Margin="0,0,0,16"/>
+            <Button x:Name="ExtendBtn" Classes="primary" Content="I'm here" Height="52"/>
+            <Grid x:Name="PauseStopRow" Margin="0,10,0,0" ColumnDefinitions="*,10,*">
+              <Button x:Name="PauseBtn" Classes="outline amber" Height="42">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <Path x:Name="PauseIcon" Data="{StaticResource PauseIcon}" VerticalAlignment="Center"/>
+                  <TextBlock x:Name="PauseText" Text="Pause" VerticalAlignment="Center"/>
+                </StackPanel>
+              </Button>
+              <Button x:Name="StopBtn" Grid.Column="2" Classes="outline red" Height="42">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <Path Data="{StaticResource StopIcon}" VerticalAlignment="Center"/>
+                  <TextBlock Text="Stop &amp; quit" VerticalAlignment="Center"/>
+                </StackPanel>
+              </Button>
+            </Grid>
+          </StackPanel>
+
+          <DockPanel x:Name="SettingsPanel">
+            <Grid DockPanel.Dock="Top" Margin="0,16,0,2" ColumnDefinitions="*,Auto">
+              <TextBlock Text="Settings" Foreground="{StaticResource TextBrush}" FontSize="18" FontWeight="SemiBold"/>
+              <Button x:Name="ResetBtn" Grid.Column="1" Classes="link" FontSize="12" Content="Reset to defaults"
+                      VerticalAlignment="Center"/>
+            </Grid>
+
+            <StackPanel DockPanel.Dock="Bottom">
+              <TextBlock x:Name="SettingsMsg" Foreground="#F08A7E" FontSize="12" TextWrapping="Wrap" Margin="0,8,0,0"/>
+              <Grid Margin="0,8,0,0" ColumnDefinitions="*,10,*">
+                <Button x:Name="BackBtn" Classes="ghost" Content="Cancel" Height="40"/>
+                <Button x:Name="SaveBtn" Grid.Column="2" Classes="primary" Content="Save" Height="40" FontSize="14"/>
+              </Grid>
+            </StackPanel>
+
+            <!-- Fixed height so the form scrolls instead of making the window taller. -->
+            <ScrollViewer x:Name="SettingsScroll" Height="290">
+              <StackPanel Margin="0,0,14,4">
+                <TextBlock Text="Check every" Classes="label"/>
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                  <TextBox x:Name="CheckMinBox" Width="84" TextAlignment="Center"/>
+                  <TextBlock Text="minutes" Foreground="{StaticResource MutedBrush}" FontSize="13" VerticalAlignment="Center"/>
+                </StackPanel>
+
+                <TextBlock Text="Final warning" Classes="label"/>
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                  <TextBox x:Name="WarnSecBox" Width="84" TextAlignment="Center"/>
+                  <TextBlock Text="seconds" Foreground="{StaticResource MutedBrush}" FontSize="13" VerticalAlignment="Center"/>
+                </StackPanel>
+
+                <TextBlock Text="When time runs out" Classes="label"/>
+                <UniformGrid Columns="3" Margin="-2,0">
+                  <RadioButton x:Name="ShutdownOpt" Classes="segment" GroupName="EndAction" Content="Shut down"/>
+                  <RadioButton x:Name="RestartOpt" Classes="segment" GroupName="EndAction" Content="Restart"/>
+                  <RadioButton x:Name="HibernateOpt" Classes="segment" GroupName="EndAction" Content="Hibernate"/>
+                </UniformGrid>
+
+                <CheckBox x:Name="SoundBox" Content="Play a sound at the final warning" Margin="0,14,0,0"/>
+                <CheckBox x:Name="TrayBox" Content="Keep running in the tray when closed" Margin="0,2,0,0"/>
+                <TextBlock x:Name="TrayNote" Foreground="{StaticResource MutedBrush}" FontSize="11" TextWrapping="Wrap"
+                           Margin="28,0,0,0" IsVisible="False"/>
+
+                <TextBlock Text="Updates" Classes="label" Margin="0,16,0,2"/>
+                <CheckBox x:Name="UpdatesBox" Content="Check for updates when the app opens"/>
+                <CheckBox x:Name="AutoInstallBox" Content="Install them automatically" Margin="0,2,0,0"/>
+
+                <TextBlock Text="GitHub token (optional)" Classes="label" Margin="0,14,0,6"/>
+                <TextBox x:Name="TokenBox" PasswordChar="•" Watermark="Paste a token to save a new one"/>
+                <TextBlock x:Name="TokenStatus" Foreground="{StaticResource MutedBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,6,0,0"/>
+                <Button x:Name="RemoveTokenBtn" Classes="link" Content="Remove the saved token"
+                        HorizontalAlignment="Left" Margin="0,6,0,0"/>
+              </StackPanel>
+            </ScrollViewer>
+          </DockPanel>
+
+          <DockPanel x:Name="ChangelogPanel">
+            <TextBlock DockPanel.Dock="Top" Text="What's new" Foreground="{StaticResource TextBrush}" FontSize="18"
+                       FontWeight="SemiBold" Margin="0,16,0,10"/>
+            <Grid x:Name="ChangelogButtons" DockPanel.Dock="Bottom" Margin="0,12,0,0" ColumnDefinitions="*,10,*">
+              <Button x:Name="ChangelogCloseBtn" Classes="ghost" Content="Close" Height="40"/>
+              <Button x:Name="ChangelogUpdateBtn" Grid.Column="2" Classes="primary" Content="Update now"
+                      Height="40" FontSize="14" IsVisible="False"/>
+            </Grid>
+            <!-- Fixed height so long notes scroll instead of growing the window. -->
+            <ScrollViewer x:Name="ChangelogScroll" Height="300">
+              <StackPanel x:Name="ChangelogContent" Margin="0,0,14,0"/>
+            </ScrollViewer>
+          </DockPanel>
+
+          <StackPanel x:Name="AskTrayPanel" VerticalAlignment="Center">
+            <Path Data="{StaticResource PowerIcon}" Stroke="#2ECC71" StrokeThickness="2.2" StrokeLineCap="Round"
+                  Width="34" Height="34" Stretch="Uniform" HorizontalAlignment="Center"/>
+            <TextBlock Text="Keep it running in the tray?" Foreground="{StaticResource TextBrush}" FontSize="18"
+                       FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,14,0,8"/>
+            <TextBlock Foreground="{StaticResource MutedBrush}" FontSize="13" TextWrapping="Wrap" TextAlignment="Center"
+                       Text="Closing the window can leave the timer running in the system tray, ready when you need it. Or the app can quit and stop the timer."/>
+            <Button x:Name="TrayYesBtn" Classes="primary" Content="Keep running in the tray"
+                    Height="46" Margin="0,22,0,0" FontSize="14"/>
+            <Button x:Name="TrayNoBtn" Classes="ghost" Content="Quit the app" Height="38" Margin="0,8,0,0"/>
+            <TextBlock Text="You can change this later in Settings." Foreground="{StaticResource MutedBrush}" FontSize="11"
+                       HorizontalAlignment="Center" Margin="0,10,0,0"/>
+          </StackPanel>
+
+          <!-- Shared by the Pause and Stop confirmations; MainWindow fills it in. -->
+          <StackPanel x:Name="ConfirmPanel" VerticalAlignment="Center">
+            <Path x:Name="ConfirmIcon" StrokeThickness="2.2" Width="34" Height="34" Stretch="Uniform"
+                  HorizontalAlignment="Center"/>
+            <TextBlock x:Name="ConfirmTitle" Foreground="{StaticResource TextBrush}" FontSize="18" FontWeight="SemiBold"
+                       HorizontalAlignment="Center" Margin="0,14,0,8"/>
+            <TextBlock x:Name="ConfirmText" Foreground="{StaticResource MutedBrush}" FontSize="13" TextWrapping="Wrap"
+                       TextAlignment="Center"/>
+            <Button x:Name="ConfirmYesBtn" Classes="filled" Height="46" Margin="0,22,0,0"/>
+            <Button x:Name="ConfirmNoBtn" Classes="ghost" Content="Keep the timer running" Height="38" Margin="0,8,0,0"/>
+          </StackPanel>
+        </Grid>
+
+      </StackPanel>
+    </Border>
+  </Panel>
+</Window>

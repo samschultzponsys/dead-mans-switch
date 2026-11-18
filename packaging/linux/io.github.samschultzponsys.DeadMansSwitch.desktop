@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Dead Man's Switch
+GenericName=Shutdown timer
+Comment=Shuts the PC down unless someone keeps confirming they're there
+Exec=dead-mans-switch
+Icon=io.github.samschultzponsys.DeadMansSwitch
+Terminal=false
+Categories=Utility;System;
+Keywords=shutdown;timer;power;restart;hibernate;
+StartupWMClass=io.github.samschultzponsys.DeadMansSwitch
+StartupNotify=true

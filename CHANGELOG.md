@@ -6,6 +6,27 @@ Versions are `MAJOR.MINOR` with a single-digit minor that rolls over after 9
 
 ## [Unreleased]
 
+## [1.6] - 2026-11-18
+
+### Added
+- **Linux.** Releases now include a `.deb` (Debian, Ubuntu, Mint), an `.rpm`
+  (Fedora, openSUSE) and a Flatpak bundle for any distribution. Shutting down
+  goes through systemd-logind, the same way the desktop's power menu does.
+  `.deb` and `.rpm` installs update themselves through the system's package
+  manager (it asks for your password); the Flatpak's update button opens the
+  download page. On Linux, Space resets the final warning while the window has
+  the keyboard; the tray icon needs a desktop that shows tray icons (GNOME
+  needs the AppIndicator extension).
+
+### Changed
+- Rebuilt on .NET 8 and Avalonia, so Windows and Linux run the same app. It
+  looks the same as before, now with the Inter font everywhere, and includes
+  everything it needs, so nothing else has to be installed.
+- The Windows download is larger (about 14 MB, up from 2 MB), because it now
+  carries its own copy of .NET.
+- The tray no longer shows a "still running" balloon the first time the window
+  is hidden.
+
 ## [1.5] - 2026-11-02
 
 ### Changed
