@@ -21,6 +21,8 @@ asleep or walk away.
 2. Clicking **I'm here** refills the ring and starts the countdown again.
    **Pause** freezes it until you click **Resume**. Pause and **Stop & quit**
    ask you to confirm first.
+   Drag the slider under the ring to change the time left on the fly; it snaps
+   to half minutes, with a notch at every minute.
 3. If the ring runs out, the window turns red and the **final warning** starts
    (60 seconds unless you change it). It plays a sound and pulls itself to the
    front every 2 seconds, even if minimized or in the tray. Press **Space** or

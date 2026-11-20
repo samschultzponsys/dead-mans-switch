@@ -53,7 +53,7 @@
              others transparent and inert, so the window keeps the size of the largest. -->
         <Grid>
           <StackPanel x:Name="MainPanel">
-            <Grid Width="232" Height="232" Margin="0,22,0,14">
+            <Grid Width="232" Height="232" Margin="0,22,0,10">
               <Ellipse Stroke="#262931" StrokeThickness="14"/>
               <Path x:Name="RingArc" StrokeThickness="14" StrokeLineCap="Round"/>
               <StackPanel VerticalAlignment="Center">
@@ -63,6 +63,19 @@
                            HorizontalAlignment="Center" Margin="0,-2,0,0"/>
               </StackPanel>
             </Grid>
+            <!-- Time left until the next check, draggable. Snaps to 30 seconds; the notches
+                 under it are drawn by MainWindow (tall each minute, short each half minute). -->
+            <StackPanel x:Name="TimeSliderBox" Margin="0,0,0,14">
+              <Slider x:Name="TimeSlider" Minimum="0" TickFrequency="30" IsSnapToTickEnabled="True"
+                      SmallChange="30" LargeChange="60" Margin="0" Cursor="Hand"
+                      ToolTip.Tip="Drag to set the time until the next check"/>
+              <Canvas x:Name="TimeTicks" Height="9" Margin="0,-6,0,0" ClipToBounds="True"/>
+              <Grid ColumnDefinitions="*,*" Margin="0,2,0,0">
+                <TextBlock Text="0:00" Foreground="{StaticResource MutedBrush}" FontSize="11"/>
+                <TextBlock x:Name="TimeSliderMax" Grid.Column="1" Foreground="{StaticResource MutedBrush}" FontSize="11"
+                           HorizontalAlignment="Right"/>
+              </Grid>
+            </StackPanel>
             <TextBlock x:Name="StatusText" Foreground="{StaticResource MutedBrush}" FontSize="12"
                        HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" Margin="0,0,0,16"/>
             <Button x:Name="ExtendBtn" Classes="primary" Content="I'm here" Height="52"/>

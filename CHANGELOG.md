@@ -6,6 +6,14 @@ Versions are `MAJOR.MINOR` with a single-digit minor that rolls over after 9
 
 ## [Unreleased]
 
+### Added
+- **Time slider.** A slider under the ring shows the time left until the next
+  check and lets you drag it to adjust it on the fly, from 30 seconds up to the
+  full check interval. It snaps to half minutes, with a notch at every minute
+  and a smaller one at every half minute (long intervals show fewer notches).
+  Arrow keys move it by 30 seconds. It works while paused, and is greyed out
+  during the final warning.
+
 ## [1.6] - 2026-11-18
 
 ### Added

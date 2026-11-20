@@ -30,6 +30,11 @@ namespace DeadMansSwitch
         const int RefrontEveryMs = 2000;   // during the warning, pull the window forward this often
         const double RingSize = 232, RingThickness = 14;
         const int SpaceHotkeyId = 1;
+        const double SliderStepSeconds = 30;   // the slider snaps to half minutes
+        const double SliderThumbHalf = 10;     // Fluent's slider thumb is 20 wide; values run between its centres
+        static readonly int[] TickMinuteSteps = { 1, 2, 5, 10, 15, 30, 60, 120, 240 };
+        static readonly IBrush MinuteTick = new SolidColorBrush(Color.FromRgb(0x6B, 0x70, 0x7B));
+        static readonly IBrush HalfMinuteTick = new SolidColorBrush(Color.FromRgb(0x45, 0x49, 0x53));
         static readonly TimeSpan UpdateCheckInterval = TimeSpan.FromHours(6);
 
         static readonly Color NormalBg = Color.FromRgb(0x16, 0x18, 0x1D);
@@ -60,6 +65,8 @@ namespace DeadMansSwitch
         TrayIcon tray;
         NativeMenuItem trayPauseItem;
         Control currentPanel;
+        bool syncingSlider;    // the slider is being moved to follow the countdown, not by the user
+        bool draggingSlider;
 
         public MainWindow() : this(new Settings(), headless: true) { }   // for the XAML previewer
 
@@ -110,6 +117,12 @@ namespace DeadMansSwitch
             ExtendBtn.Click += (s, e) => ImHere();
             PauseBtn.Click += (s, e) => PauseOrResume();
             UpdateBtn.Click += async (s, e) => await InstallUpdate();
+
+            TimeSlider.ValueChanged += (s, e) => { if (!syncingSlider) SetRemainingFromSlider(e.NewValue); };
+            TimeSlider.AddHandler(PointerPressedEvent, (s, e) => draggingSlider = true, RoutingStrategies.Tunnel, handledEventsToo: true);
+            TimeSlider.AddHandler(PointerReleasedEvent, (s, e) => draggingSlider = false, RoutingStrategies.Tunnel, handledEventsToo: true);
+            TimeSlider.PointerCaptureLost += (s, e) => draggingSlider = false;
+            TimeTicks.SizeChanged += (s, e) => DrawTicks();
             ChangelogUpdateBtn.Click += async (s, e) => await InstallUpdate();
 
             // Seen before the focused control gets it, so these work wherever focus is.
@@ -232,6 +245,11 @@ namespace DeadMansSwitch
             Root.Background = new SolidColorBrush(NormalBg);
             ExtendBtn.Content = "I'm here";
             PauseBtn.IsVisible = true;
+            TimeSliderBox.IsEnabled = true;
+            TimeSliderBox.Opacity = 1;
+            TimeSlider.Maximum = phaseSeconds;
+            TimeSliderMax.Text = FormatClock((int)phaseSeconds);
+            DrawTicks();
             FillRow(StopBtn, alone: false, column: 2);
             ShowPauseState();
             Refresh();
@@ -247,6 +265,9 @@ namespace DeadMansSwitch
             Root.Background = new SolidColorBrush(WarnBg);
             ExtendBtn.Content = "I'm still here – keep it on";
             PauseBtn.IsVisible = false;
+            TimeSliderBox.IsEnabled = false;   // the slider sets the check time; the warning can't be shortened or stretched
+            TimeSliderBox.Opacity = 0.35;
+            draggingSlider = false;
             FillRow(StopBtn, alone: true, column: 2);
             SetTrayPause(false, enabled: false);
             TimeLabel.Text = "seconds until " + ActionNoun;
@@ -322,9 +343,7 @@ namespace DeadMansSwitch
             if (failed) return;
             double remaining = paused ? pausedRemaining : Math.Max(0, (deadline - DateTime.Now).TotalSeconds);
             int whole = (int)Math.Ceiling(remaining);
-            string text = phase == Phase.Check
-                ? (whole >= 3600 ? $"{whole / 3600}:{whole / 60 % 60:00}:{whole % 60:00}" : $"{whole / 60}:{whole % 60:00}")
-                : whole.ToString();
+            string text = phase == Phase.Check ? FormatClock(whole) : whole.ToString();
             if (TimeText.Text != text)
             {
                 TimeText.Text = text;
@@ -334,6 +353,59 @@ namespace DeadMansSwitch
                         : $"Dead Man's Switch - {text} s until {ActionNoun}";
             }
             DrawRing(phaseSeconds > 0 ? remaining / phaseSeconds : 0);
+            if (!draggingSlider)
+            {
+                syncingSlider = true;
+                TimeSlider.Value = phase == Phase.Check ? remaining : 0;
+                syncingSlider = false;
+            }
+        }
+
+        static string FormatClock(int seconds) =>
+            seconds >= 3600 ? $"{seconds / 3600}:{seconds / 60 % 60:00}:{seconds % 60:00}" : $"{seconds / 60}:{seconds % 60:00}";
+
+        /// <summary>
+        /// The user moved the slider: the countdown continues from there, to the
+        /// nearest half minute and never less than one, paused or not.
+        /// </summary>
+        void SetRemainingFromSlider(double value)
+        {
+            if (phase != Phase.Check || failed) return;
+            double seconds = Math.Max(SliderStepSeconds, Math.Round(value / SliderStepSeconds) * SliderStepSeconds);
+            seconds = Math.Min(seconds, phaseSeconds);
+            if (paused) pausedRemaining = seconds;
+            else deadline = DateTime.Now.AddSeconds(seconds);
+            Refresh();
+        }
+
+        /// <summary>
+        /// Notches under the slider: a tall one each minute and a short one each
+        /// half minute. Long check intervals would pack them into a solid bar, so
+        /// then the half minutes are left out and the tall ones spaced further apart.
+        /// </summary>
+        void DrawTicks()
+        {
+            double width = TimeTicks.Bounds.Width;
+            int minutes = (int)Math.Round(TimeSlider.Maximum / 60);
+            TimeTicks.Children.Clear();
+            if (width <= 0 || minutes <= 0) return;
+
+            double usable = width - 2 * SliderThumbHalf;
+            double perMinute = usable / minutes;
+            int step = Array.Find(TickMinuteSteps, n => n * perMinute >= 5);
+            if (step == 0) step = TickMinuteSteps[^1];
+
+            void Tick(double minute, double height, IBrush brush)
+            {
+                var mark = new Avalonia.Controls.Shapes.Rectangle { Width = 1, Height = height, Fill = brush };
+                Canvas.SetLeft(mark, Math.Round(SliderThumbHalf + minute * perMinute - 0.5));
+                TimeTicks.Children.Add(mark);
+            }
+
+            if (step == 1 && perMinute / 2 >= 4)
+                for (int m = 0; m < minutes; m++) Tick(m + 0.5, 4, HalfMinuteTick);
+            for (int m = 0; m <= minutes; m += step) Tick(m, 8, MinuteTick);
+            if (minutes % step != 0) Tick(minutes, 8, MinuteTick);
         }
 
         /// <summary>Draws the remaining fraction as an arc running clockwise from 12 o'clock.</summary>
@@ -823,6 +895,11 @@ namespace DeadMansSwitch
             if (!paused) throw new Exception("Confirming pause did not pause.");
             PauseOrResume();
             if (paused) throw new Exception("Resume did not resume.");
+            TimeSlider.Value = 90;   // as if dragged
+            double left = (deadline - DateTime.Now).TotalSeconds;
+            if (left < 89 || left > 90.5) throw new Exception($"The slider set {left:0.0} s instead of 90.");
+            TimeSlider.Value = 5;
+            if ((deadline - DateTime.Now).TotalSeconds < 29) throw new Exception("The slider went below 30 seconds.");
             AskToConfirm(Confirm.Quit);
             ShowPanel(MainPanel);   // "Keep the timer running"
             if (quitting) throw new Exception("Backing out of quit still quit.");
