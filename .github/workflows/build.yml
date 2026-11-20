@@ -120,14 +120,15 @@ jobs:
           echo "VERSION=$(cat VERSION)" >> "$GITHUB_ENV"
           chmod +x packaging/flatpak/input/app/DeadMansSwitch   # artifacts drop the executable bit
 
-      # Flathub's own builder action, made for this container (it handles the
-      # container's quirks: no FUSE, no machine ID, the preinstalled runtimes).
-      - uses: flatpak/flatpak-github-actions/flatpak-builder@v6
-        with:
-          manifest-path: packaging/flatpak/io.github.samschultzponsys.DeadMansSwitch.yml
-          bundle: DeadMansSwitch-${{ env.VERSION }}.flatpak
-          cache: false
-          upload-artifact: false
+      # Builds with the runtime and SDK already in this container. Flathub's
+      # builder action also updates them from Flathub first, and that update
+      # fails inside the container ("Invalid cross-device link") whenever
+      # Flathub has a newer SDK than the image. No FUSE here, hence no rofiles.
+      - name: Build the bundle
+        run: |
+          flatpak-builder --repo=repo --disable-rofiles-fuse --force-clean --default-branch=master \
+            flatpak_app packaging/flatpak/$APP_ID.yml
+          flatpak build-bundle repo "DeadMansSwitch-$VERSION.flatpak" $APP_ID master
 
       - name: Test the bundle
         run: |
