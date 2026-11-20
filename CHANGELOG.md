@@ -6,6 +6,8 @@ Versions are `MAJOR.MINOR` with a single-digit minor that rolls over after 9
 
 ## [Unreleased]
 
+## [1.7] - 2026-11-20
+
 ### Added
 - **Time slider.** A slider under the ring shows the time left until the next
   check and lets you drag it to adjust it on the fly, from 30 seconds up to the
